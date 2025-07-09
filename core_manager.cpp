@@ -1,4 +1,5 @@
 #include "core_manager.h"
+#include "memory_manager.h"
 #include "process.h"
 #include "util.h"
 
@@ -133,7 +134,10 @@ void CoreManager::listProcessStatus() {
 void CoreManager::tickLoop() {
     while (!stop) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        cpuTicks.fetch_add(1);
+        uint64_t tick = cpuTicks.fetch_add(1);
+        if (tick % quantumCycles == 0) {
+            MemoryManager::getInstance().dumpSnapshot(tick / quantumCycles);
+        }
         queueCond.notify_all();
     }
 }
@@ -166,6 +170,16 @@ void CoreManager::coreWorker(int coreId) {
             proc->assignedCore = coreId;
             coreBusy[coreId] = true;
 
+            if (!proc->inMemory) {
+                if (!MemoryManager::getInstance().allocate(proc)) {
+                    // Cannot allocate memory — requeue and skip this cycle
+                    readyQueue.push(proc);
+                    queueCond.notify_one();
+                    coreBusy[coreId] = false;
+                    continue;
+                }
+            }
+
             if (proc->timestamp.empty()) {
                 proc->timestamp = getCurrentTimestamp();
             }
@@ -183,6 +197,10 @@ void CoreManager::coreWorker(int coreId) {
             std::lock_guard<std::mutex> lock(queueMutex);
             readyQueue.push(proc);
             queueCond.notify_one();
+        }
+
+        if (proc->isFinished()) {
+            MemoryManager::getInstance().release(proc);
         }
 
         coreBusy[coreId] = false;

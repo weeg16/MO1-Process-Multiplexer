@@ -35,6 +35,10 @@ public:
     int totalInstructions;
     std::atomic<int> executedInstructions;
     int assignedCore;
+    int memStart = -1;
+    int memEnd = -1;
+    bool inMemory = false;
+
     std::string timestamp;
     std::vector<std::string> logs;
     int tickWaitCounter = 0;
