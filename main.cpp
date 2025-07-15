@@ -94,7 +94,7 @@ int main() {
         }
         else if (command == "scheduler-stop") {
             if (schedulerStarted) {
-                coreManager.stopScheduler();
+                coreManager.stopSchedulerThread();
                 schedulerStarted = false;
             } else {
                 std::cout << "\n[WARN] Scheduler is not running.\n";
