@@ -33,6 +33,11 @@ std::string getCurrentTimestamp() {
     return std::string(buffer);
 }
 
+uint64_t getCurrentCycle() {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+}
+
 void printHeader() {
     #ifdef _WIN32
         HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);

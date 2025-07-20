@@ -44,6 +44,19 @@ bool loadConfig(const std::string& filename, Config& config) {
         else if (key == "min-ins") iss >> config.minIns;
         else if (key == "max-ins") iss >> config.maxIns;
         else if (key == "delay-per-exec") iss >> config.delayPerExec;
+        else if (key == "paging-mode") {
+            std::string mode;
+            iss >> mode;
+            std::transform(mode.begin(), mode.end(), mode.begin(), ::tolower);
+            config.pagingMode = (mode == "on");
+        }
+        else if (key == "replacement-policy") {
+            iss >> config.replacementPolicy;
+            std::transform(config.replacementPolicy.begin(), config.replacementPolicy.end(), config.replacementPolicy.begin(), ::tolower);
+        }
+        else if (key == "max-overall-mem") iss >> config.maxOverallMem;
+        else if (key == "mem-per-frame") iss >> config.memPerFrame;
+        else if (key == "mem-per-proc") iss >> config.memPerProc;
     }
 
     return true;

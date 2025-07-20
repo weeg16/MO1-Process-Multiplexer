@@ -51,6 +51,15 @@ public:
     size_t instructionPointer = 0;
     std::unordered_map<std::string, uint16_t> variables;
 
+    struct PageTableEntry {
+        int frameNo = -1;
+        bool valid = false;
+        uint64_t lastUsed = 0;
+    };
+
+    std::unordered_map<int, PageTableEntry> pageTable;
+    std::unordered_map<int, bool> pageValid;
+
     bool executeNextInstruction();
 
     int sleepTicks = 0;

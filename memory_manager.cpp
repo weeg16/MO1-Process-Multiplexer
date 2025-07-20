@@ -25,9 +25,16 @@ MemoryManager& MemoryManager::getInstance() {
 }
 
 MemoryManager::MemoryManager() {
-    // Initially, all memory is one free block
-    memoryBlocks.push_back({0, totalMemory - 1, false, ""});
+    int frameCount = totalMemory / processMemory;  // 16384 / 4096 = 4
+    frameTable.reserve(frameCount);
+
+    for (int i = 0; i < frameCount; ++i) {
+        frameTable.push_back(Frame(i, "", -1, false, 0));
+    }
+
+    std::cout << "[INFO] Frame table initialized with " << frameTable.size() << " frames.\n";
 }
+
 
 bool MemoryManager::allocate(Process* proc) {
     std::lock_guard<std::mutex> lock(memMutex);
@@ -147,4 +154,57 @@ void MemoryManager::dumpSnapshot(uint64_t quantum) {
 
     out << "----start---- = 0\n";
     out.close();
+}
+
+bool MemoryManager::accessPage(Process* proc, int virtualPageNo) { 
+    std::lock_guard<std::mutex> lock(memMutex);
+
+    // 1. Check if page is already loaded in a frame
+    for (auto& frame : frameTable) {
+        if (frame.valid && frame.processName == proc->name && frame.virtualPageNo == virtualPageNo) {
+            frame.lastUsed = getCurrentCycle(); // Access updates timestamp
+            // Update process page table (just in case)
+            proc->pageTable[virtualPageNo].frameNo = frame.frameNo;
+            proc->pageTable[virtualPageNo].valid = true;
+            return true;
+        }
+    }
+
+    // 2. Try to find a free frame
+    for (auto& frame : frameTable) {
+        if (!frame.valid) {
+            frame.processName = proc->name;
+            frame.virtualPageNo = virtualPageNo;
+            frame.valid = true;
+            frame.lastUsed = getCurrentCycle();
+
+            // Update process page table
+            proc->pageTable[virtualPageNo].frameNo = frame.frameNo;
+            proc->pageTable[virtualPageNo].valid = true;
+            return true;
+        }
+    }
+
+    // 3. No free frame — need to evict using LRU
+    auto victim = std::min_element(frameTable.begin(), frameTable.end(),
+        [](const Frame& a, const Frame& b) {
+            return a.lastUsed < b.lastUsed;
+        });
+
+    std::cout << "[LRU] Evicting frame " << victim->frameNo
+              << " (Process: " << victim->processName << ", VPN: " << victim->virtualPageNo << ")\n";
+
+    // Invalidate the old process's page table entry (if you track all processes, do it here)
+
+    // Replace with the new page
+    victim->processName = proc->name;
+    victim->virtualPageNo = virtualPageNo;
+    victim->valid = true;
+    victim->lastUsed = getCurrentCycle();
+
+    // Update current process's page table
+    proc->pageTable[virtualPageNo].frameNo = victim->frameNo;
+    proc->pageTable[virtualPageNo].valid = true;
+
+    return true;
 }

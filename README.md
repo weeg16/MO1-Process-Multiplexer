@@ -22,6 +22,15 @@ This program simulates a basic operating system process scheduler with support f
 3. **Config:**
     - Make sure config.txt is present in the project directory.
     - Edit as needed to set CPU count, scheduler type, instruction lengths, etc.
+
+## Features
+
+- [x] FCFS and Round-Robin Scheduling
+- [x] Instruction-based process simulation
+- [x] Per-process memory allocation and logs
+- [x] CLI interface with `screen -s` and `screen -r`
+- [x] Memory snapshot generation and CPU utilization reporting
+
   
 ## Main Menu Commands
 
@@ -77,13 +86,14 @@ Edit `config.txt` to control:
 
 Example:
 ```
-numCPU=2
-schedulerType=fcfs
-quantumCycles=1
-batchProcFreq=5
-minIns=10
-maxIns=50
-delayPerExec=100
+num-cpu 2
+scheduler "fcfs"
+quantum-cycles 1
+batch-process-freq 5
+min-ins 10
+max-ins 50
+delay-per-exec 100
+
 ```
 
 ## Tips and Edge Cases

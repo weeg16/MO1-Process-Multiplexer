@@ -18,6 +18,12 @@ struct Config {
     uint32_t minIns;
     uint32_t maxIns;
     uint32_t delayPerExec;
+
+    bool pagingMode;
+    std::string replacementPolicy;
+    int maxOverallMem;
+    int memPerFrame;
+    int memPerProc;
 };
 
 bool loadConfig(const std::string& filename, Config& config);
