@@ -35,7 +35,7 @@ public:
     void listProcessStatus();
     void printProcessSummary(std::ostream& out, bool colorize);
     Process* getProcessByName(const std::string& name);
-    Process* spawnNewNamedProcess(const std::string& name);
+    Process* spawnNewNamedProcess(const std::string& name, int memorySize);
     int generateRandomInstructionCount() const;
 
 private:

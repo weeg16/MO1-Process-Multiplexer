@@ -10,7 +10,9 @@ menu logic, command parsing, and overall program flow.
 #include "screen.h"
 #include "process.h"
 #include "core_manager.h"
+#include "memory_manager.h"
 
+#include <sstream>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -54,7 +56,11 @@ int main() {
                     config.maxIns,
                     config.delayPerExec
                 );
+                
                 std::cout << "\n[OK] Configuration loaded.\n\n";
+                
+                MemoryManager::getInstance().configure(config.maxOverallMem, config.memPerFrame);
+
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 clearScreen();
                 printHeader();
@@ -116,16 +122,27 @@ int main() {
             coreManager.printProcessSummary(std::cout, true);
         }
         else if (command.rfind("screen -s ", 0) == 0 && schedulerStarted) {
-            std::string pname = command.substr(10);
-            Process* existing = coreManager.getProcessByName(pname);
+            std::istringstream iss(command.substr(10));
+            std::string pname;
+            int memSize;
+            iss >> pname >> memSize;
 
+            if (memSize < 64 || memSize > 65536 || (memSize & (memSize - 1)) != 0) {
+                std::cout << "\n[ERROR] Invalid memory allocation. Must be power of 2 and between 64-65536 bytes.\n";
+                std::this_thread::sleep_for(std::chrono::seconds(2));
+                clearScreen();
+                printHeader();
+                continue;
+            }
+
+            Process* existing = coreManager.getProcessByName(pname);
             if (existing != nullptr) {
                 std::cout << "\n[ERROR] Process '" << pname << "' already exists. Use 'screen -r " << pname << "' to reattach.\n";
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 clearScreen();
                 printHeader();
             } else {
-                Process* newProc = coreManager.spawnNewNamedProcess(pname);
+                Process* newProc = coreManager.spawnNewNamedProcess(pname, memSize);
                 enterProcessScreen(newProc);
             }
         }
@@ -140,6 +157,12 @@ int main() {
                 clearScreen();
                 printHeader();
             }
+        }
+        else if (command == "process-smi") {
+            std::cout << "\n[INFO] process-smi recognized (feature coming soon).\n";
+        }
+        else if (command == "vmstat") {
+            std::cout << "\n[INFO] vmstat recognized (feature coming soon).\n";
         }
         else {
             std::cout << "\nUnrecognized command.\n\n";

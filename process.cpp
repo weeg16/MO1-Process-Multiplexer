@@ -11,11 +11,10 @@
 #include <sstream>
 #include <vector>
 
-Process::Process(const std::string& name, int id, int totalIns)
-    : name(name), id(id), totalInstructions(totalIns), executedInstructions(0), assignedCore(-1) {
-
-    int numPages = 4096 / 16; // Assuming 4KB per process, 16B per frame = 256 pages
-
+Process::Process(const std::string& name, int id, int totalIns, int memorySize)
+    : name(name), id(id), totalInstructions(totalIns), executedInstructions(0), assignedCore(-1), memorySize(memorySize) {
+    int memPerFrame = MemoryManager::getInstance().getFrameSize(); // Add getter if needed
+    int numPages = (memorySize + memPerFrame - 1) / memPerFrame;
     for (int vpn = 0; vpn < numPages; ++vpn) {
         pageTable[vpn].frameNo = -1;
         pageTable[vpn].valid = false;
@@ -44,7 +43,7 @@ void Process::logPrint(const std::string& message) {
 void Process::executeSingleInstruction(const Instruction& ins) {
     // --- Begin Paging Simulation ---
     // Let's say each instruction accesses the page corresponding to instructionPointer / 2 (for demo)
-    int pageSize = 4096; // (You can use your configured page size)
+    int memPerFrame = MemoryManager::getInstance().getFrameSize();
     int virtualPageNo = instructionPointer / 2;
 
     MemoryManager& memoryManager = MemoryManager::getInstance();

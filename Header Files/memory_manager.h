@@ -9,6 +9,7 @@
 class MemoryManager {
 public:
     static MemoryManager& getInstance();
+    void configure(int totalMem, int frameSize);
 
     struct Frame {
         int frameNo;
@@ -25,6 +26,8 @@ public:
 
     int getFrameCount() const { return frameTable.size(); }
     const Frame& getFrame(int index) const { return frameTable[index]; }
+
+    int getFrameSize() const { return memPerFrame; }
     
     struct Block {
         int start;
@@ -44,8 +47,9 @@ private:
     MemoryManager(const MemoryManager&) = delete;
     MemoryManager& operator=(const MemoryManager&) = delete;
 
-    const int totalMemory = 16384;      // bytes
-    const int processMemory = 4096;     // bytes
+    int totalMemory = 0;
+    int memPerFrame = 0;
+
     std::vector<Block> memoryBlocks;
     std::mutex memMutex;
 

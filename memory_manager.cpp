@@ -25,16 +25,7 @@ MemoryManager& MemoryManager::getInstance() {
 }
 
 MemoryManager::MemoryManager() {
-    int frameCount = totalMemory / processMemory;  // 16384 / 4096 = 4
-    frameTable.reserve(frameCount);
-
-    for (int i = 0; i < frameCount; ++i) {
-        frameTable.push_back(Frame(i, "", -1, false, 0));
-    }
-
-    std::cout << "[INFO] Frame table initialized with " << frameTable.size() << " frames.\n";
 }
-
 
 bool MemoryManager::allocate(Process* proc) {
     std::lock_guard<std::mutex> lock(memMutex);
@@ -42,10 +33,10 @@ bool MemoryManager::allocate(Process* proc) {
     for (auto& block : memoryBlocks) {
         int blockSize = block.end - block.start + 1;
 
-        if (!block.occupied && blockSize >= processMemory) {
+        if (!block.occupied && blockSize >= memPerFrame) {
             // Allocate from this block
             int allocStart = block.start;
-            int allocEnd = allocStart + processMemory - 1;
+            int allocEnd = allocStart + memPerFrame - 1;
 
             // Update current block
             block.start = allocEnd + 1;
@@ -133,7 +124,7 @@ void MemoryManager::dumpSnapshot(uint64_t quantum) {
     for (const auto& block : memoryBlocks) {
         if (block.occupied) {
             inMemCount++;
-        } else if ((block.end - block.start + 1) < processMemory) {
+        } else if ((block.end - block.start + 1) < memPerFrame) {
             fragmentation += (block.end - block.start + 1);
         }
     }
@@ -208,3 +199,17 @@ bool MemoryManager::accessPage(Process* proc, int virtualPageNo) {
 
     return true;
 }
+
+void MemoryManager::configure(int totalMem, int frameSize) {
+    std::lock_guard<std::mutex> lock(memMutex);
+    totalMemory = totalMem;
+    memPerFrame = frameSize;
+    int frameCount = totalMemory / memPerFrame;
+    frameTable.clear();
+    frameTable.reserve(frameCount);
+    for (int i = 0; i < frameCount; ++i) {
+        frameTable.emplace_back(i, "", -1, false, 0);
+    }
+    std::cout << "\n[INFO] Frame table initialized with " << frameTable.size() << " frames.\n";
+}
+

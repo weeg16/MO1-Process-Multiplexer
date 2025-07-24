@@ -86,7 +86,7 @@ void CoreManager::startSchedulerThread(const Config& config) {
                 std::string pname = "process" + std::to_string(processCounter);
                 std::uniform_int_distribution<uint32_t> dist(config.minIns, config.maxIns);
                 int numIns = dist(rng);
-                auto* proc = new Process(pname, processCounter++, numIns);
+                auto* proc = new Process(pname, processCounter++, numIns, config.memPerProc);
                 addProcess(proc);
                 std::this_thread::sleep_for(std::chrono::seconds(config.batchProcFreq));
             }
@@ -214,10 +214,10 @@ Process* CoreManager::getProcessByName(const std::string& name) {
     return nullptr;
 }
 
-Process* CoreManager::spawnNewNamedProcess(const std::string& name) {
+Process* CoreManager::spawnNewNamedProcess(const std::string& name, int memorySize) {
     std::uniform_int_distribution<uint32_t> dist(minIns, maxIns);
     int numIns = dist(rng);
-    Process* proc = new Process(name, processCounter++, numIns);
+    Process* proc = new Process(name, processCounter++, numIns, memorySize);
     addProcess(proc);
     return proc;
 }

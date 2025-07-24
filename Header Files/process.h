@@ -43,7 +43,9 @@ public:
     std::vector<std::string> logs;
     int tickWaitCounter = 0;
 
-    Process(const std::string& name, int id, int totalIns);
+    int memorySize = 0;
+    Process(const std::string& name, int id, int totalIns, int memorySize);
+
     bool isFinished() const;
     void logPrint(const std::string& message);
 
