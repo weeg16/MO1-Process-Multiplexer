@@ -88,7 +88,13 @@ void CoreManager::startSchedulerThread(const Config& config) {
                 int numIns = dist(rng);
                 auto* proc = new Process(pname, processCounter++, numIns);
                 addProcess(proc);
-                std::this_thread::sleep_for(std::chrono::seconds(config.batchProcFreq));
+
+
+                std::unique_lock<std::mutex> lock(generatorMutex);
+                if (generatorCond.wait_for(lock, std::chrono::seconds(config.batchProcFreq),
+                                        [&] { return !generating.load(); })) {
+                    break;  // Exit early if generating turned false
+}
             }
         } catch (const std::exception& e) {
             std::cerr << "[Scheduler Error] " << e.what() << "\n";
@@ -100,6 +106,9 @@ void CoreManager::startSchedulerThread(const Config& config) {
 void CoreManager::stopSchedulerThread() {
     if (!generating.load()) return;
     generating = false;
+
+    generatorCond.notify_all();  // Wakes up the wait
+
     if (schedulerThread.joinable()) schedulerThread.join();
     std::cout << "[INFO] Batch process generation stopped.\n";
 }
@@ -272,4 +281,19 @@ void CoreManager::printProcessSummary(std::ostream& out, bool colorize) {
 int CoreManager::generateRandomInstructionCount() const {
     std::uniform_int_distribution<uint32_t> dist(minIns, maxIns);
     return dist(const_cast<std::default_random_engine&>(rng));
+}
+
+void CoreManager::pauseCores() {
+    stop = true;
+    queueCond.notify_all();  // unblock any waiting threads
+    if (tickThread.joinable()) tickThread.join();
+
+    for (auto& t : cores) {
+        if (t.joinable()) t.join();
+    }
+
+    std::cout << "\n[INFO] Cores paused. No further execution or snapshots.\n\n";
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+    clearScreen();
+    printHeader();
 }

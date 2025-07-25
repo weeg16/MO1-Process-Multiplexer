@@ -9,6 +9,7 @@
 class MemoryManager {
 public:
     static MemoryManager& getInstance();
+    void init(uint32_t totalMem, uint32_t perProcMem);
     
     struct Block {
         int start;
@@ -26,8 +27,8 @@ private:
     MemoryManager(const MemoryManager&) = delete;
     MemoryManager& operator=(const MemoryManager&) = delete;
 
-    const int totalMemory = 16384;      // bytes
-    const int processMemory = 4096;     // bytes
+    int totalMemory;     
+    int processMemory;    
     std::vector<Block> memoryBlocks;
     std::mutex memMutex;
 

@@ -37,6 +37,7 @@ public:
     Process* getProcessByName(const std::string& name);
     Process* spawnNewNamedProcess(const std::string& name);
     int generateRandomInstructionCount() const;
+    void pauseCores();
 
 private:
     void tickLoop();
@@ -69,4 +70,7 @@ private:
     std::atomic<uint64_t> cpuTicks{0};
 
     std::default_random_engine rng{std::random_device{}()};
+
+    std::condition_variable generatorCond;
+    std::mutex generatorMutex;
 };

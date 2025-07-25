@@ -10,6 +10,7 @@ menu logic, command parsing, and overall program flow.
 #include "screen.h"
 #include "process.h"
 #include "core_manager.h"
+#include "memory_manager.h"
 
 #include <iostream>
 #include <string>
@@ -54,7 +55,26 @@ int main() {
                     config.maxIns,
                     config.delayPerExec
                 );
+
                 std::cout << "\n[OK] Configuration loaded.\n\n";
+
+                // Init memory manager
+                MemoryManager::getInstance().init(config.maxMemory, config.maxMemPerProc);
+
+                // Create backing store file if not exists
+                std::ifstream testFile(config.diskFile);
+                if (!testFile.good()) {
+                    std::ofstream createFile(config.diskFile);
+                    if (createFile.is_open()) {
+                        std::cout << "[INFO] Created backing store file: " << config.diskFile << "\n";
+                        createFile.close();
+                    } else {
+                        std::cerr << "[ERROR] Failed to create backing store file.\n";
+                    }
+                } else {
+                    std::cout << "[INFO] Backing store file found: " << config.diskFile << "\n";
+                }
+
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 clearScreen();
                 printHeader();
@@ -95,6 +115,7 @@ int main() {
         else if (command == "scheduler-stop") {
             if (schedulerStarted) {
                 coreManager.stopSchedulerThread();
+                coreManager.pauseCores();
                 schedulerStarted = false;
             } else {
                 std::cout << "\n[WARN] Scheduler is not running.\n";

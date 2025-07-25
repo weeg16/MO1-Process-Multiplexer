@@ -29,6 +29,14 @@ MemoryManager::MemoryManager() {
     memoryBlocks.push_back({0, totalMemory - 1, false, ""});
 }
 
+void MemoryManager::init(uint32_t totalMem, uint32_t perProcMem) {
+    totalMemory = totalMem;
+    processMemory = perProcMem;
+
+    memoryBlocks.clear();
+    memoryBlocks.push_back({0, totalMemory - 1, false, ""});
+}
+
 bool MemoryManager::allocate(Process* proc) {
     std::lock_guard<std::mutex> lock(memMutex);
 
