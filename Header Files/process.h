@@ -5,6 +5,8 @@ Declares the Process class, instruction data structures, and function signatures
 process state, instruction execution, and process screen interaction.
 */
 
+#include "paging.h"
+
 #pragma once
 #include <string>
 #include <atomic>
@@ -18,7 +20,9 @@ enum class InstructionType {
     ADD,
     SUBTRACT,
     SLEEP,
-    FOR
+    FOR,
+    READ,
+    WRITE
 };
 
 struct Instruction {
@@ -50,6 +54,7 @@ public:
     std::vector<Instruction> instructions;
     size_t instructionPointer = 0;
     std::unordered_map<std::string, uint16_t> variables;
+    std::unordered_map<int, uint16_t> memory;  // Simulated memory (address → value)
 
     bool executeNextInstruction();
 
@@ -57,6 +62,10 @@ public:
     std::vector<std::tuple<size_t, size_t, int>> forStack; 
 
     void executeSingleInstruction(const Instruction& ins);
+
+    std::vector<PageTableEntry> pageTable;
+    
+    
 };
 
 void enterProcessScreen(Process* proc);

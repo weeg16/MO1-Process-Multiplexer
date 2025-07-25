@@ -1,4 +1,5 @@
 #include "memory_manager.h"
+#include "core_manager.h"
 #include "util.h"
 
 #include <fstream>
@@ -10,6 +11,16 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <direct.h> // For Windows
+
+extern CoreManager coreManager;  // Access global coreManager
+
+Process* MemoryManager::findProcessByName(const std::string& name) {
+    return coreManager.getProcessByName(name);
+}
+
+uint64_t MemoryManager::getCurrentCycle() const {
+    return coreManager.getCpuTicks();  // assuming getCpuTicks() exists
+}
 
 inline void createFolderIfMissing(const std::string& folderName) {
 #ifdef _WIN32
@@ -29,16 +40,36 @@ MemoryManager::MemoryManager() {
     memoryBlocks.push_back({0, totalMemory - 1, false, ""});
 }
 
-void MemoryManager::init(uint32_t totalMem, uint32_t perProcMem) {
+void MemoryManager::init(uint32_t totalMem, uint32_t perProcMem, uint32_t memPerFrame) {
     totalMemory = totalMem;
     processMemory = perProcMem;
+    this->memPerFrame = memPerFrame;
+
+    numFrames = totalMemory / memPerFrame;
+
+    frameTable.clear();
+    frameTable.resize(numFrames);  // All entries default to unoccupied
 
     memoryBlocks.clear();
     memoryBlocks.push_back({0, totalMemory - 1, false, ""});
+
+    // std::cout << "[INIT] totalMemory = " << totalMemory << ", processMemory = " << processMemory << std::endl; // FOR DEBUGGING
+
+    // std::cout << "[DEBUG] Initialized " << numFrames << " physical frames (mem-per-frame = " 
+    //         << memPerFrame << ")\n";
+
+    // for (int i = 0; i < numFrames; ++i) {
+    //     std::cout << "  Frame " << i 
+    //             << " | Occupied: " << (frameTable[i].occupied ? "true" : "false")
+    //             << " | Owner: " << frameTable[i].processName 
+    //             << " | Page: " << frameTable[i].pageNumber << "\n";
+    // }
 }
 
 bool MemoryManager::allocate(Process* proc) {
     std::lock_guard<std::mutex> lock(memMutex);
+
+    // std::cout << "[ALLOCATE] Trying to allocate memory for process " << proc->name << std::endl; // FOR DEBUGGING
 
     for (auto& block : memoryBlocks) {
         int blockSize = block.end - block.start + 1;
@@ -67,10 +98,13 @@ bool MemoryManager::allocate(Process* proc) {
             proc->memEnd = allocEnd;
             proc->inMemory = true;
 
+            // std::cout << "[ALLOCATE] Successfully allocated memory for process " << proc->name << std::endl; // FOR DEBUGGING
+
             return true;
         }
     }
 
+    // std::cout << "[ALLOCATE] Failed to allocate memory for process " << proc->name << std::endl; // FOR DEBUGGING
     return false; // no space
 }
 
@@ -154,5 +188,106 @@ void MemoryManager::dumpSnapshot(uint64_t quantum) {
     }
 
     out << "----start---- = 0\n";
+
+    out << "\n--- Frame Table ---\n";
+    for (int i = 0; i < frameTable.size(); ++i) {
+        const auto& frame = frameTable[i];
+        if (frame.occupied)
+            out << "Frame " << i << ": " << frame.processName << ", page " << frame.pageNumber << " (valid)\n";
+        else
+            out << "Frame " << i << ": [free]\n";
+    }
+    out << "\n";
+
     out.close();
+}
+
+const std::vector<MemoryManager::FrameInfo>& MemoryManager::getFrameTable() const {
+    return frameTable;
+}
+
+bool MemoryManager::loadPage(Process* proc, int pageNumber, uint64_t currentCycle) {
+    std::lock_guard<std::mutex> lock(memMutex);
+
+    // Step 1: Try to find a free frame
+    int frameIndex = -1;
+    for (int i = 0; i < numFrames; ++i) {
+        if (!frameTable[i].occupied) {
+            frameIndex = i;
+            break;
+        }
+    }
+
+    // Step 2: If no free frame, use LRU
+    if (frameIndex == -1) {
+        int oldestCycle = INT32_MAX;
+        for (int i = 0; i < numFrames; ++i) {
+            if (frameTable[i].lastUsedCycle < oldestCycle) {
+                oldestCycle = frameTable[i].lastUsedCycle;
+                frameIndex = i;
+            }
+        }
+
+        std::string victimProc = frameTable[frameIndex].processName;
+        int victimPage = frameTable[frameIndex].pageNumber;
+
+        Process* victim = MemoryManager::getInstance().findProcessByName(victimProc);
+        if (victim) {
+            // if (victim->pageTable[victimPage].dirty) {
+            //     std::cout << "[SWAP-OUT] Writing dirty page " << victimPage << " of process " << victimProc << " to backing store.\n"; // FOR DEBUGGING
+            //     // (Optional: simulate writing to backing store file)
+            // }
+
+            if (victim->pageTable[victimPage].dirty) {
+                std::ofstream backingStore("csopesy-backing-store.txt", std::ios::app);
+                if (backingStore.is_open()) {
+                    // You can replace "dummydata" with your page content if available
+                    backingStore << victimProc << "," << victimPage << "," << "dummydata" << std::endl;
+                    backingStore.close();
+                }
+            }
+
+            victim->logPrint("Evicted page " + std::to_string(victimPage) + " from frame " + std::to_string(frameIndex));
+            victim->pageTable[victimPage].valid = false;
+            victim->pageTable[victimPage].frameNumber = -1;
+            victim->pageTable[victimPage].dirty = false;
+        }
+
+        // std::cout << "[EVICT] Replacing page " << victimPage << " from process " << victimProc << " (frame " << frameIndex << ")\n";
+    }
+
+    // Step 3: Load new page
+    frameTable[frameIndex].occupied = true;
+    frameTable[frameIndex].processName = proc->name;
+    frameTable[frameIndex].pageNumber = pageNumber;
+    frameTable[frameIndex].lastUsedCycle = currentCycle;
+
+    auto& pageEntry = proc->pageTable[pageNumber];
+    pageEntry.frameNumber = frameIndex;
+    pageEntry.valid = true;
+    pageEntry.lastUsedCycle = currentCycle;
+
+    // Simulate swap-in: check if this page is in the backing store file
+    std::ifstream backingStore("csopesy-backing-store.txt");
+    std::string line;
+    while (std::getline(backingStore, line)) {
+        std::istringstream iss(line);
+        std::string procName, pageStr, data;
+        std::getline(iss, procName, ',');
+        std::getline(iss, pageStr, ',');
+        std::getline(iss, data); // data can contain commas
+
+        // if (procName == proc->name && std::stoi(pageStr) == pageNumber) {
+        //     std::cout << "[SWAP-IN] Loaded page " << pageNumber << " for process " << proc->name
+        //             << " from backing store (data=" << data << ")\n";
+        //     break;
+        // }
+    }
+    backingStore.close();
+
+
+    // std::cout << "[PAGE LOAD] Process " << proc->name << " loaded page " << pageNumber
+    //           << " into frame " << frameIndex << "\n";
+
+    return true;
 }

@@ -59,7 +59,21 @@ int main() {
                 std::cout << "\n[OK] Configuration loaded.\n\n";
 
                 // Init memory manager
-                MemoryManager::getInstance().init(config.maxMemory, config.maxMemPerProc);
+                MemoryManager::getInstance().init(config.maxMemory, config.minMemPerProc, config.frameSize);
+
+                /*
+                
+                NOTE:
+
+                If you want:
+                    (1) More page swaps and faults: Lower mem-per-frame or total memory.
+
+                    (2) More processes at once: Raise max-overall-mem.
+
+                    (3) Stricter memory fit: Raise min-mem-per-proc so that only 1 or 2 processes fit at a time.
+
+                */
+
 
                 // Create backing store file if not exists
                 std::ifstream testFile(config.diskFile);
@@ -95,6 +109,13 @@ int main() {
                 printHeader();
                 continue;
             }
+
+            /* 
+            to see mmore page activity, you can: 
+                (1) increase max-ins in config.txt, 
+                (2) lower mem-per-frame so fewer instructions fit in one page, OR 
+                (3) generate more READ / WRITE instructions with broad address ranges 
+            */
 
             if (!schedulerStarted) {
                 std::cout << "\n[INFO] Starting " << config.schedulerType << " Scheduler...\n\n";

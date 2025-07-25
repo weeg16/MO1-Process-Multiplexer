@@ -100,7 +100,7 @@ void CoreManager::startSchedulerThread(const Config& config) {
             std::cerr << "[Scheduler Error] " << e.what() << "\n";
         }
     });
-    std::cout << "[INFO] Batch process generation started.\n";
+    std::cout << "[INFO] Batch process generation started.\n\n";
 }
 
 void CoreManager::stopSchedulerThread() {
@@ -167,6 +167,9 @@ void CoreManager::coreWorker(int coreId) {
         Process* proc = nullptr;
         {
             std::unique_lock<std::mutex> lock(queueMutex);
+
+            // std::cout << "[CORE " << coreId << "] Waiting for a process..." << std::endl; // FOR DEBUGGING
+
             queueCond.wait(lock, [&] { return stop || !readyQueue.empty(); });
 
             if (stop && readyQueue.empty()) {
@@ -179,8 +182,13 @@ void CoreManager::coreWorker(int coreId) {
             proc->assignedCore = coreId;
             coreBusy[coreId] = true;
 
+            // std::cout << "[CORE " << coreId << "] Picked process " << proc->name << " (inMemory=" << proc->inMemory << ")" << std::endl; // FOR DEBUGGING
+
             if (!proc->inMemory) {
+                // std::cout << "[CORE " << coreId << "] Attempting to allocate memory for " << proc->name << std::endl; // FOR DEBUGGING
+
                 if (!MemoryManager::getInstance().allocate(proc)) {
+                    // std::cout << "[CORE " << coreId << "] Could not allocate memory for " << proc->name << ", requeuing." << std::endl; // FOR DEBUGGING
                     // Cannot allocate memory — requeue and skip this cycle
                     readyQueue.push(proc);
                     queueCond.notify_one();
@@ -296,4 +304,8 @@ void CoreManager::pauseCores() {
     std::this_thread::sleep_for(std::chrono::seconds(2));
     clearScreen();
     printHeader();
+}
+
+uint64_t CoreManager::getCpuTicks() const {
+    return cpuTicks.load();
 }

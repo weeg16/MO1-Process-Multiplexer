@@ -9,7 +9,7 @@
 class MemoryManager {
 public:
     static MemoryManager& getInstance();
-    void init(uint32_t totalMem, uint32_t perProcMem);
+    void init(uint32_t totalMem, uint32_t perProcMem, uint32_t memPerFrame);
     
     struct Block {
         int start;
@@ -22,15 +22,35 @@ public:
     void release(Process* proc);    // free memory block
     void dumpSnapshot(uint64_t quantum);  // snapshot file generation
 
+    struct FrameInfo {
+        bool occupied = false;
+        std::string processName;
+        int pageNumber = -1;
+        int lastUsedCycle = 0;
+    };
+
+    const std::vector<FrameInfo>& getFrameTable() const;
+
+    uint32_t getMemPerFrame() const { return memPerFrame; }
+    uint64_t getCurrentCycle() const;  // forward declaration
+
+    bool loadPage(Process* proc, int pageNumber, uint64_t currentCycle);
+
+    Process* findProcessByName(const std::string& name);
+
 private:
     MemoryManager();
     MemoryManager(const MemoryManager&) = delete;
     MemoryManager& operator=(const MemoryManager&) = delete;
 
-    int totalMemory;     
-    int processMemory;    
+    void mergeFreeBlocks();
+
+    int totalMemory;
+    int processMemory;
+    int numFrames;
+    uint32_t memPerFrame;
+
+    std::vector<FrameInfo> frameTable;
     std::vector<Block> memoryBlocks;
     std::mutex memMutex;
-
-    void mergeFreeBlocks();
 };

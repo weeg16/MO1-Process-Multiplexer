@@ -5,6 +5,7 @@ Implements miscellaneous utility functions (timestamp generation, color output,
 input handling) used throughout the OS Emulator project.
 */
 
+#include "process.h"
 #include "util.h"
 #include <iostream>
 #include <chrono>
@@ -99,4 +100,18 @@ void printColoredTimestamp(std::ostream& out, const std::string& ts) {
     // advance p to after "AM" or "PM"
     if (t.substr(p + 1, 2) == "AM" || t.substr(p + 1, 2) == "PM") p += 3;
     out << BLUE << ")" << RESET;
+}
+
+std::string to_string(InstructionType type) {
+    switch (type) {
+        case InstructionType::PRINT:    return "PRINT";
+        case InstructionType::DECLARE:  return "DECLARE";
+        case InstructionType::ADD:      return "ADD";
+        case InstructionType::SUBTRACT: return "SUBTRACT";
+        case InstructionType::SLEEP:    return "SLEEP";
+        case InstructionType::FOR:      return "FOR";
+        case InstructionType::READ:     return "READ";
+        case InstructionType::WRITE:    return "WRITE";
+        default:                        return "UNKNOWN";
+    }
 }

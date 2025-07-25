@@ -39,6 +39,8 @@ public:
     int generateRandomInstructionCount() const;
     void pauseCores();
 
+    uint64_t getCpuTicks() const;
+
 private:
     void tickLoop();
     void coreWorker(int coreId);
