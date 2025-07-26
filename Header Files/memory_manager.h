@@ -42,6 +42,9 @@ public:
 
     int getTotalMemory() const { return totalMemory; }
 
+    int getPagesIn() const { return pagesIn; }
+    int getPagesOut() const { return pagesOut; }
+
 private:
     MemoryManager();
     MemoryManager(const MemoryManager&) = delete;
@@ -57,4 +60,7 @@ private:
     std::vector<FrameInfo> frameTable;
     std::vector<Block> memoryBlocks;
     std::mutex memMutex;
+
+    int pagesIn = 0;
+    int pagesOut = 0;
 };

@@ -13,6 +13,7 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include <iomanip>
 
 static const char* ORANGE = "\033[38;5;208m";
 static const char* BLUE   = "\033[34m";
@@ -104,7 +105,7 @@ void CoreManager::startSchedulerThread(const Config& config) {
             std::cerr << "[Scheduler Error] " << e.what() << "\n";
         }
     });
-    std::cout << "[INFO] Batch process generation started.\n\n";
+    std::cout << colorizeTag("[INFO] Batch process generation started.") << "\n\n";
 }
 
 void CoreManager::stopSchedulerThread() {
@@ -374,4 +375,68 @@ void CoreManager::pauseCores() {
 
 uint64_t CoreManager::getCpuTicks() const {
     return cpuTicks.load();
+}
+
+void CoreManager::printVMStat(std::ostream& out) {
+    const auto& mem = MemoryManager::getInstance();
+    const auto& frames = mem.getFrameTable();
+
+    int totalMem = mem.getTotalMemory();
+    int usedFrames = 0;
+
+    for (const auto& f : frames) {
+        if (f.occupied) usedFrames++;
+    }
+
+    int usedMem = usedFrames * mem.getMemPerFrame();
+    int freeMem = totalMem - usedMem;
+
+    uint64_t totalTicks = getCpuTicks();
+    int totalActive = 0;
+    for (auto count : coreInstructions) totalActive += count;
+    int totalCores = coreInstructions.size();
+    uint64_t totalPossible = totalTicks * totalCores;
+    uint64_t totalIdle = (totalPossible > totalActive) ? totalPossible - totalActive : 0;
+
+    int active = 0;
+    for (auto* proc : allProcesses)
+        if (!proc->isFinished()) active++;
+    int finished = allProcesses.size() - active;
+
+    // === Output ===
+    out << "\n" << "=== VMSTAT ===\n\n";
+
+    // out << "\n--------------------------------------------\n";
+    // out << "|                  VMSTAT                  |\n";
+    // out << "--------------------------------------------\n\n";
+
+    out << BLUE << "Memory Summary:\n\n" << RESET;
+    out << "Total Memory: " << ORANGE << totalMem << RESET << " bytes\n";
+    out << "Used Memory:  " << ORANGE << usedMem << RESET << " bytes\n";
+    out << "Free Memory:  " << ORANGE << freeMem << RESET << " bytes\n\n";
+
+    out << BLUE << "CPU Ticks:\n\n" << RESET;
+    out << "- Idle:   " << ORANGE << totalIdle << RESET << "\n";
+    out << "- Active: " << ORANGE << totalActive << RESET << "\n";
+    out << "- Total:  " << ORANGE << totalPossible << RESET << "\n\n";
+
+    out << BLUE << "Page Activity:\n\n" << RESET;
+    out << "- Pages Paged In:  " << ORANGE << mem.getPagesIn() << RESET << "\n";
+    out << "- Pages Paged Out: " << ORANGE << mem.getPagesOut() << RESET << "\n\n";
+
+    out << BLUE << "Frame Table Usage:\n\n" << RESET;
+    for (int i = 0; i < frames.size(); ++i) {
+        const auto& f = frames[i];
+        out << "Frame " << std::setw(2) << i << ": ";
+        if (f.occupied)
+            out << f.processName << ", page " << f.pageNumber << " (" << GREEN << "valid" << RESET << ")";
+        else
+            out << RED << "[free]" << RESET;
+        out << "\n";
+    }
+
+    // not sure if we have to display the list of processes.. so this is what i did for now.. specs kinda confusing
+    out << "\n" << BLUE << "Processes:\n\n" << RESET;
+    out << "- Active:   " << ORANGE << active << RESET << "\n";
+    out << "- Finished: " << ORANGE << finished << RESET << "\n"; 
 }

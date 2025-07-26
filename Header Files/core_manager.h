@@ -42,6 +42,8 @@ public:
 
     uint64_t getCpuTicks() const;
     void printProcessSMI(std::ostream& out, bool colorize);
+    void printVMStat(std::ostream& out);
+
 
 private:
     void tickLoop();

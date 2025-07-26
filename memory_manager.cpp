@@ -251,6 +251,8 @@ bool MemoryManager::loadPage(Process* proc, int pageNumber, uint64_t currentCycl
             victim->pageTable[victimPage].valid = false;
             victim->pageTable[victimPage].frameNumber = -1;
             victim->pageTable[victimPage].dirty = false;
+
+            pagesOut++;
         }
 
         // std::cout << "[EVICT] Replacing page " << victimPage << " from process " << victimProc << " (frame " << frameIndex << ")\n";
@@ -267,6 +269,8 @@ bool MemoryManager::loadPage(Process* proc, int pageNumber, uint64_t currentCycl
     pageEntry.valid = true;
     pageEntry.lastUsedCycle = currentCycle;
 
+    pagesIn++;
+
     // Simulate swap-in: check if this page is in the backing store file
     std::ifstream backingStore("csopesy-backing-store.txt");
     std::string line;
@@ -276,18 +280,8 @@ bool MemoryManager::loadPage(Process* proc, int pageNumber, uint64_t currentCycl
         std::getline(iss, procName, ',');
         std::getline(iss, pageStr, ',');
         std::getline(iss, data); // data can contain commas
-
-        // if (procName == proc->name && std::stoi(pageStr) == pageNumber) {
-        //     std::cout << "[SWAP-IN] Loaded page " << pageNumber << " for process " << proc->name
-        //             << " from backing store (data=" << data << ")\n";
-        //     break;
-        // }
     }
     backingStore.close();
-
-
-    // std::cout << "[PAGE LOAD] Process " << proc->name << " loaded page " << pageNumber
-    //           << " into frame " << frameIndex << "\n";
 
     return true;
 }

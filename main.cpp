@@ -39,6 +39,7 @@ int main() {
             clearScreen();
             printHeader();
         }
+        
         else if (command == "exit") {
             if (schedulerStarted) {
                 coreManager.stopScheduler();  
@@ -46,6 +47,7 @@ int main() {
             std::cout << "\nExiting...\n\n";
             isRunning = false;
         }
+        
         else if (command == "initialize") {
             if (loadConfig("config.txt", config)) {
                 coreManager.configure(
@@ -82,13 +84,13 @@ int main() {
                 if (!testFile.good()) {
                     std::ofstream createFile(config.diskFile);
                     if (createFile.is_open()) {
-                        std::cout << colorizeTag("\n[INFO] Created backing store file: " + config.diskFile) << "\n";
+                        std::cout << colorizeTag("[INFO] Created backing store file: " + config.diskFile) << "\n";
                         createFile.close();
                     } else {
                         std::cerr << colorizeTag("[ERROR] Failed to create backing store file.") << "\n";
                     }
                 } else {
-                    std::cout << colorizeTag("\n[INFO] Backing store file found: " + config.diskFile) << "\n";
+                    std::cout << colorizeTag("[INFO] Backing store file found: " + config.diskFile) << "\n";
                 }
 
                 std::this_thread::sleep_for(std::chrono::seconds(2));
@@ -103,6 +105,7 @@ int main() {
                 printHeader();
             }
         }
+
         else if (command == "scheduler-start") {
             if (!isInitialized) {
                 std::cout << "\n" << colorizeTag("[WARN] Please run 'initialize' first.") << "\n\n";
@@ -136,6 +139,7 @@ int main() {
                 printHeader();
             }
         }
+
         else if (command == "scheduler-stop") {
             if (schedulerStarted) {
                 coreManager.stopSchedulerThread();
@@ -148,6 +152,7 @@ int main() {
                 printHeader();
             }
         }
+
         else if (command == "report-util") {
             std::ofstream file("csopesy-log.txt");
             coreManager.printProcessSummary(file, false);
@@ -157,6 +162,7 @@ int main() {
             clearScreen();
             printHeader();
         }
+
         else if (command == "screen -ls") {
             coreManager.printProcessSummary(std::cout, true);
             std::cout << "Press ENTER to return to menu...\n";
@@ -165,6 +171,7 @@ int main() {
             clearScreen();
             printHeader();
         }
+        
         else if (command.rfind("screen -s ", 0) == 0 && schedulerStarted) {
             std::string remaining = command.substr(10); // Skip "screen -s "
             std::istringstream iss(remaining);
@@ -201,6 +208,7 @@ int main() {
             Process* newProc = coreManager.spawnNewNamedProcess(pname, mem);
             enterProcessScreen(newProc);
         }
+
         else if (command.rfind("screen -r ", 0) == 0 && schedulerStarted) {
             std::string pname = command.substr(10);
             Process* proc = coreManager.getProcessByName(pname);
@@ -227,6 +235,7 @@ int main() {
                 enterProcessScreen(proc); // normal log view for finished or running process
             }
         }
+
         else if (command.rfind("screen -c ", 0) == 0 && schedulerStarted) {
             std::string rest = command.substr(10); // Skip "screen -c "
 
@@ -295,6 +304,15 @@ int main() {
         
         else if (command == "process-smi" && isInitialized) {
             coreManager.printProcessSMI(std::cout, true);
+            std::cout << "\nPress ENTER to return to menu...\n";
+            std::string pause;
+            std::getline(std::cin, pause);
+            clearScreen();
+            printHeader();
+        }
+
+        else if (command == "vmstat" && isInitialized) {
+            coreManager.printVMStat(std::cout);
             std::cout << "\nPress ENTER to return to menu...\n";
             std::string pause;
             std::getline(std::cin, pause);
