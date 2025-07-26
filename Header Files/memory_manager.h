@@ -38,6 +38,8 @@ public:
 
     Process* findProcessByName(const std::string& name);
 
+    int getDefaultProcessMemory() const { return processMemory; }
+
 private:
     MemoryManager();
     MemoryManager(const MemoryManager&) = delete;

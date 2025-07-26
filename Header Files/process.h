@@ -48,6 +48,8 @@ public:
     int tickWaitCounter = 0;
 
     Process(const std::string& name, int id, int totalIns);
+    Process(const std::string& name, int id, int totalIns, int requestedMem);
+
     bool isFinished() const;
     void logPrint(const std::string& message);
 
@@ -65,6 +67,12 @@ public:
 
     std::vector<PageTableEntry> pageTable;
     
+    int requestedMemory = 0;  // In bytes
+
+    bool memoryViolation = false;
+    uint32_t violationAddress = 0;
+    std::string violationTime;
+    bool isAddressValid(uint32_t addr) const;
     
 };
 

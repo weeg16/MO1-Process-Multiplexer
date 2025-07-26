@@ -7,6 +7,7 @@ paging.cpp
 #include "paging.h"
 #include <vector>
 #include <limits>
+#include <cstddef>
 
 // Finds the index of the least recently used page in the page table
 int findLRUPageIndex(const std::vector<PageTableEntry>& pageTable) {

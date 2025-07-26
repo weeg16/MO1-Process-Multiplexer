@@ -231,10 +231,10 @@ Process* CoreManager::getProcessByName(const std::string& name) {
     return nullptr;
 }
 
-Process* CoreManager::spawnNewNamedProcess(const std::string& name) {
+Process* CoreManager::spawnNewNamedProcess(const std::string& name, int memoryBytes) {
     std::uniform_int_distribution<uint32_t> dist(minIns, maxIns);
     int numIns = dist(rng);
-    Process* proc = new Process(name, processCounter++, numIns);
+    Process* proc = new Process(name, processCounter++, numIns, memoryBytes);
     addProcess(proc);
     return proc;
 }

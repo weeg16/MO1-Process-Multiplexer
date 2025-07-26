@@ -74,10 +74,10 @@ bool MemoryManager::allocate(Process* proc) {
     for (auto& block : memoryBlocks) {
         int blockSize = block.end - block.start + 1;
 
-        if (!block.occupied && blockSize >= processMemory) {
+        if (!block.occupied && blockSize >= proc->requestedMemory) {
             // Allocate from this block
             int allocStart = block.start;
-            int allocEnd = allocStart + processMemory - 1;
+            int allocEnd = allocStart + proc->requestedMemory - 1;
 
             // Update current block
             block.start = allocEnd + 1;

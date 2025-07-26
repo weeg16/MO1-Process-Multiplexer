@@ -6,11 +6,16 @@ input handling) used throughout the OS Emulator project.
 */
 
 #include "process.h"
+#include "memory_manager.h"
 #include "util.h"
+
+#include <sstream>
+#include <cctype>
 #include <iostream>
 #include <chrono>
 #include <ctime>
 #include <iomanip>
+#include <algorithm>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -114,4 +119,119 @@ std::string to_string(InstructionType type) {
         case InstructionType::WRITE:    return "WRITE";
         default:                        return "UNKNOWN";
     }
+}
+
+std::vector<Instruction> parseInstructions(const std::string& input) {
+    std::cout << "[DEBUG] Raw input: " << input << "\n";
+    std::vector<Instruction> result;
+    std::istringstream ss(input);
+    std::string line;
+
+    while (std::getline(ss, line, ';')) {  // Split by semicolon
+        // Trim whitespace
+        line.erase(0, line.find_first_not_of(" \t\r\n"));
+        line.erase(line.find_last_not_of(" \t\r\n") + 1);
+        if (line.empty()) continue;
+
+        // Extract first word (opcode) by skipping non-space, then stop at first space or '(', whichever comes first
+        std::string opcode;
+        size_t i = 0;
+        while (i < line.size() && !isspace(line[i]) && line[i] != '(') {
+            opcode += line[i];
+            ++i;
+        }
+        // Now skip spaces after opcode
+        while (i < line.size() && isspace(line[i])) ++i;
+        // Rest of line is the args
+        std::string args = line.substr(i);
+        std::istringstream lineStream(args);
+
+        // Trim opcode (optional)
+        opcode.erase(0, opcode.find_first_not_of(" \t\r\n"));
+        opcode.erase(opcode.find_last_not_of(" \t\r\n") + 1);
+
+        std::cout << "[TRACE] opcode = '" << opcode << "'\n";
+
+        if (opcode == "DECLARE") {
+            std::string var; int val;
+            lineStream >> var >> val;
+            result.push_back({InstructionType::DECLARE, {var, std::to_string(val)}});
+        }
+        else if (opcode == "ADD" || opcode == "SUB") {
+            std::string dest, a, b;
+            lineStream >> dest >> a >> b;
+            InstructionType type = (opcode == "ADD") ? InstructionType::ADD : InstructionType::SUBTRACT;
+            result.push_back({type, {dest, a, b}});
+        }
+        else if (opcode == "SLEEP") {
+            int ticks;
+            lineStream >> ticks;
+            result.push_back({InstructionType::SLEEP, {std::to_string(ticks)}});
+        }
+        else if (opcode == "READ") {
+            std::string var, addr;
+            lineStream >> var >> addr;
+            result.push_back({InstructionType::READ, {var, addr}});
+        }
+        else if (opcode == "WRITE") {
+            std::string addr, val;
+            lineStream >> addr >> val;
+            result.push_back({InstructionType::WRITE, {addr, val}});
+        }
+        else if (opcode == "PRINT") {
+            // Get everything after PRINT
+            std::string rest;
+            std::getline(lineStream, rest);
+
+            size_t open = rest.find('(');
+            size_t close = rest.rfind(')');
+            if (open == std::string::npos || close == std::string::npos || open >= close)
+                return {};
+
+            std::string content = rest.substr(open + 1, close - open - 1);
+            size_t plusPos = content.find('+');
+            if (plusPos == std::string::npos) return {};
+
+            std::string literal = content.substr(0, plusPos);
+            std::string var = content.substr(plusPos + 1);
+
+            literal.erase(std::remove(literal.begin(), literal.end(), '\\'), literal.end());
+            literal.erase(std::remove_if(literal.begin(), literal.end(), ::isspace), literal.end());
+            var.erase(std::remove_if(var.begin(), var.end(), ::isspace), var.end());
+
+            if (literal.front() == '"' && literal.back() == '"') {
+                literal = literal.substr(1, literal.size() - 2);
+            } else {
+                return {}; // invalid string literal
+            }
+
+            result.push_back({InstructionType::PRINT, {literal, var}});
+        }
+        else {
+            std::cout << "[ERROR] Unknown opcode in line: " << line << "\n";
+            return {};
+        }
+    }
+
+    std::cout << "[DEBUG] Successfully parsed " << result.size() << " instructions.\n";
+    return result;
+}
+
+bool ensureSymbolTableMapped(Process* proc) {
+    int pageSize = MemoryManager::getInstance().getMemPerFrame();
+    int symbolPageIndex = 0; // Assume symbol table is at virtual address 0x0000
+    auto& pageEntry = proc->pageTable[symbolPageIndex];
+
+    if (!pageEntry.valid) {
+        return MemoryManager::getInstance().loadPage(proc, symbolPageIndex, MemoryManager::getInstance().getCurrentCycle());
+    }
+    return true;
+}
+
+std::string getCurrentTimeStr() {
+    std::time_t now = std::time(nullptr);
+    std::tm* t = std::localtime(&now);
+    char buf[16];
+    std::strftime(buf, sizeof(buf), "%H:%M:%S", t);
+    return std::string(buf);
 }

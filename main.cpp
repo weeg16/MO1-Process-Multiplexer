@@ -12,6 +12,8 @@ menu logic, command parsing, and overall program flow.
 #include "core_manager.h"
 #include "memory_manager.h"
 
+#include <algorithm>
+#include <sstream>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -158,30 +160,131 @@ int main() {
             coreManager.printProcessSummary(std::cout, true);
         }
         else if (command.rfind("screen -s ", 0) == 0 && schedulerStarted) {
-            std::string pname = command.substr(10);
-            Process* existing = coreManager.getProcessByName(pname);
+            std::string remaining = command.substr(10); // Skip "screen -s "
+            std::istringstream iss(remaining);
+            std::string pname;
+            int mem;
 
-            if (existing != nullptr) {
-                std::cout << "\n[ERROR] Process '" << pname << "' already exists. Use 'screen -r " << pname << "' to reattach.\n";
+            iss >> pname >> mem;
+
+            if (pname.empty() || iss.fail()) {
+                std::cout << "\n[ERROR] Invalid syntax. Usage: screen -s <name> <mem>\n";
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 clearScreen();
                 printHeader();
-            } else {
-                Process* newProc = coreManager.spawnNewNamedProcess(pname);
-                enterProcessScreen(newProc);
+                continue;
             }
+
+            // Validate memory
+            if (mem < 64 || mem > 65536 || (mem & (mem - 1)) != 0) {
+                std::cout << "\n[ERROR] Invalid memory size. Must be power of 2 between 64 and 65536 bytes.\n";
+                std::this_thread::sleep_for(std::chrono::seconds(2));
+                clearScreen();
+                printHeader();
+                continue;
+            }
+
+            if (coreManager.getProcessByName(pname)) {
+                std::cout << "\n[ERROR] Process '" << pname << "' already exists.\n";
+                std::this_thread::sleep_for(std::chrono::seconds(2));
+                clearScreen();
+                printHeader();
+                continue;
+            }
+
+            Process* newProc = coreManager.spawnNewNamedProcess(pname, mem);
+            enterProcessScreen(newProc);
         }
         else if (command.rfind("screen -r ", 0) == 0 && schedulerStarted) {
             std::string pname = command.substr(10);
             Process* proc = coreManager.getProcessByName(pname);
-            if (proc && !proc->isFinished()) {
-                enterProcessScreen(proc);
-            } else {
-                std::cout << "\nProcess " << pname << " not found or has finished.\n";
+
+            if (!proc) {
+                std::cout << "\nProcess " << pname << " not found.\n";
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 clearScreen();
                 printHeader();
+            } else if (proc->memoryViolation) {
+                clearScreen();
+                printHeader();
+                std::cout << "Process " << proc->name
+                        << " shut down due to memory access violation error that occurred at "
+                        << proc->violationTime << ". 0x"
+                        << std::hex << std::uppercase << proc->violationAddress
+                        << " invalid.\n";
+                std::cout << "\nPress ENTER to return to menu...\n";
+                std::string pause;
+                std::getline(std::cin, pause);
+                clearScreen();
+                printHeader();
+            } else {
+                enterProcessScreen(proc); // normal log view for finished or running process
             }
+        }
+        else if (command.rfind("screen -c ", 0) == 0 && schedulerStarted) {
+            std::string rest = command.substr(10); // Skip "screen -c "
+
+            size_t firstSpace = rest.find(' ');
+            size_t secondSpace = rest.find(' ', firstSpace + 1);
+
+            if (firstSpace == std::string::npos || secondSpace == std::string::npos) {
+                std::cout << "\n[ERROR] Invalid syntax. Usage: screen -c <name> <mem> \"<instructions>\"\n";
+                std::this_thread::sleep_for(std::chrono::seconds(2));
+                clearScreen();
+                printHeader();
+                continue;
+            }
+
+            std::string pname = rest.substr(0, firstSpace);
+            int mem = std::stoi(rest.substr(firstSpace + 1, secondSpace - firstSpace - 1));
+            std::string instrStr = rest.substr(secondSpace + 1);
+
+            if (instrStr.front() == '"' && instrStr.back() == '"') {
+                instrStr = instrStr.substr(1, instrStr.size() - 2);
+            }
+
+            // std::replace(instrStr.begin(), instrStr.end(), ';', '\n');
+
+            std::string debugInstrStr = instrStr;
+            std::replace(debugInstrStr.begin(), debugInstrStr.end(), ';', '\n');
+            std::cout << "[DEBUG] Parsed instrStr:\n" << debugInstrStr << "\n";
+
+            if (mem < 64 || mem > 65536 || (mem & (mem - 1)) != 0) {
+                std::cout << "\n[ERROR] Invalid memory size. Must be power of 2 between 64 and 65536 bytes.\n";
+                std::this_thread::sleep_for(std::chrono::seconds(2));
+                clearScreen();
+                printHeader();
+                continue;
+            }
+
+            if (coreManager.getProcessByName(pname)) {
+                std::cout << "\n[ERROR] Process '" << pname << "' already exists.\n";
+                std::this_thread::sleep_for(std::chrono::seconds(2));
+                clearScreen();
+                printHeader();
+                continue;
+            }
+
+            auto parsed = parseInstructions(instrStr);
+            if (parsed.empty()) {
+                std::cout << "\n[ERROR] Invalid instruction format.\n";
+                std::this_thread::sleep_for(std::chrono::seconds(2));
+                clearScreen();
+                printHeader();
+                continue;
+            }
+            if (parsed.size() > 50) {
+                std::cout << "\n[ERROR] Too many instructions (max 50).\n";
+                std::this_thread::sleep_for(std::chrono::seconds(2));
+                clearScreen();
+                printHeader();
+                continue;
+            }
+
+            Process* proc = new Process(pname, 9999, parsed.size(), mem);  // use dummy ID
+            proc->instructions = parsed;
+            coreManager.addProcess(proc);
+            enterProcessScreen(proc);
         }
         else {
             std::cout << "\nUnrecognized command.\n\n";
