@@ -27,8 +27,11 @@ input handling) used throughout the OS Emulator project.
 #endif
 
 #define ORANGE "\033[38;5;208m"
-#define BLUE "\033[34m"
-#define RESET "\033[0m"
+#define BLUE   "\033[34m"
+#define YELLOW "\033[33m"
+#define GREEN  "\033[32m"
+#define RED    "\033[31m"
+#define RESET  "\033[0m"
 
 std::string getCurrentTimestamp() {
     auto now = std::chrono::system_clock::now();
@@ -234,4 +237,33 @@ std::string getCurrentTimeStr() {
     char buf[16];
     std::strftime(buf, sizeof(buf), "%H:%M:%S", t);
     return std::string(buf);
+}
+
+std::string formatBytes(int bytes) {
+    std::ostringstream oss;
+    if (bytes >= 1024 * 1024) {
+        double mib = bytes / (1024.0 * 1024.0);
+        oss << ORANGE << std::fixed << std::setprecision(2) << mib << " MiB" << RESET;
+    } else if (bytes >= 1024) {
+        double kib = bytes / 1024.0;
+        oss << ORANGE << std::fixed << std::setprecision(2) << kib << " KiB" << RESET;
+    } else {
+        oss << ORANGE << bytes << " B" << RESET;
+    }
+    return oss.str();
+}
+
+std::string colorizeTag(const std::string& line) {
+    std::ostringstream out;
+
+    if (line.find("[INFO]") != std::string::npos)
+        out << GREEN << line << RESET;
+    else if (line.find("[WARN]") != std::string::npos)
+        out << YELLOW << line << RESET;
+    else if (line.find("[ERROR]") != std::string::npos)
+        out << RED << line << RESET;
+    else
+        out << line;
+
+    return out.str();
 }

@@ -40,6 +40,8 @@ public:
 
     int getDefaultProcessMemory() const { return processMemory; }
 
+    int getTotalMemory() const { return totalMemory; }
+
 private:
     MemoryManager();
     MemoryManager(const MemoryManager&) = delete;

@@ -41,6 +41,7 @@ public:
     void pauseCores();
 
     uint64_t getCpuTicks() const;
+    void printProcessSMI(std::ostream& out, bool colorize);
 
 private:
     void tickLoop();

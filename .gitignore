@@ -1,5 +1,6 @@
 # 💾 Ignore backing store file
-backing_store.txt
+csopesy-backing-store.txt
+csopesy-log.txt
 
 # 🧠 Ignore memory snapshots
 memory_snapshots/

@@ -20,3 +20,5 @@ std::string to_string(InstructionType type);
 std::vector<Instruction> parseInstructions(const std::string& input);
 bool ensureSymbolTableMapped(class Process* proc);
 std::string getCurrentTimeStr();
+std::string formatBytes(int bytes);
+std::string colorizeTag(const std::string& line);

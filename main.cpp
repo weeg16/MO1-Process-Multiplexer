@@ -82,13 +82,13 @@ int main() {
                 if (!testFile.good()) {
                     std::ofstream createFile(config.diskFile);
                     if (createFile.is_open()) {
-                        std::cout << "[INFO] Created backing store file: " << config.diskFile << "\n";
+                        std::cout << colorizeTag("\n[INFO] Created backing store file: " + config.diskFile) << "\n";
                         createFile.close();
                     } else {
-                        std::cerr << "[ERROR] Failed to create backing store file.\n";
+                        std::cerr << colorizeTag("[ERROR] Failed to create backing store file.") << "\n";
                     }
                 } else {
-                    std::cout << "[INFO] Backing store file found: " << config.diskFile << "\n";
+                    std::cout << colorizeTag("\n[INFO] Backing store file found: " + config.diskFile) << "\n";
                 }
 
                 std::this_thread::sleep_for(std::chrono::seconds(2));
@@ -97,7 +97,7 @@ int main() {
                 isInitialized = true;
                 schedulerStarted = false;
             } else {
-                std::cout << "\n[ERROR] Failed to load config.txt.\n\n";
+                std::cout << "\n" << colorizeTag("[ERROR] Failed to load config.txt.") << "\n\n";
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 clearScreen();
                 printHeader();
@@ -105,7 +105,7 @@ int main() {
         }
         else if (command == "scheduler-start") {
             if (!isInitialized) {
-                std::cout << "\n[WARN] Please run 'initialize' first.\n\n";
+                std::cout << "\n" << colorizeTag("[WARN] Please run 'initialize' first.") << "\n\n";
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 clearScreen();
                 printHeader();
@@ -120,7 +120,8 @@ int main() {
             */
 
             if (!schedulerStarted) {
-                std::cout << "\n[INFO] Starting " << config.schedulerType << " Scheduler...\n\n";
+                std::cout << colorizeTag("\n[INFO] Starting " + config.schedulerType + " Scheduler...") << "\n\n";
+
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 clearScreen();
                 printHeader();
@@ -129,7 +130,7 @@ int main() {
                 coreManager.startSchedulerThread(config);     
                 schedulerStarted = true;
             } else {
-                std::cout << "\n[WARN] Scheduler is already running.\n\n";
+                std::cout << "\n" << colorizeTag("[WARN] Scheduler is already running.") << "\n\n";
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 clearScreen();
                 printHeader();
@@ -141,7 +142,7 @@ int main() {
                 coreManager.pauseCores();
                 schedulerStarted = false;
             } else {
-                std::cout << "\n[WARN] Scheduler is not running.\n";
+                std::cout << "\n" << colorizeTag("[WARN] Scheduler is not running.") << "\n";
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 clearScreen();
                 printHeader();
@@ -151,13 +152,18 @@ int main() {
             std::ofstream file("csopesy-log.txt");
             coreManager.printProcessSummary(file, false);
             file.close();
-            std::cout << "\n[INFO] Report generated at csopesy-log.txt!\n";
+            std::cout << colorizeTag("\n[INFO] Report generated at csopesy-log.txt!") << "\n";
             std::this_thread::sleep_for(std::chrono::seconds(2));
             clearScreen();
             printHeader();
         }
         else if (command == "screen -ls") {
             coreManager.printProcessSummary(std::cout, true);
+            std::cout << "Press ENTER to return to menu...\n";
+            std::string pause;
+            std::getline(std::cin, pause);
+            clearScreen();
+            printHeader();
         }
         else if (command.rfind("screen -s ", 0) == 0 && schedulerStarted) {
             std::string remaining = command.substr(10); // Skip "screen -s "
@@ -168,7 +174,7 @@ int main() {
             iss >> pname >> mem;
 
             if (pname.empty() || iss.fail()) {
-                std::cout << "\n[ERROR] Invalid syntax. Usage: screen -s <name> <mem>\n";
+                std::cout << "\n" << colorizeTag("[ERROR] Invalid syntax. Usage: screen -s <name> <mem>") << "\n";
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 clearScreen();
                 printHeader();
@@ -177,7 +183,7 @@ int main() {
 
             // Validate memory
             if (mem < 64 || mem > 65536 || (mem & (mem - 1)) != 0) {
-                std::cout << "\n[ERROR] Invalid memory size. Must be power of 2 between 64 and 65536 bytes.\n";
+                std::cout << "\n" << colorizeTag("[ERROR] Invalid memory size. Must be power of 2 between 64 and 65536 bytes.") << "\n";
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 clearScreen();
                 printHeader();
@@ -185,7 +191,7 @@ int main() {
             }
 
             if (coreManager.getProcessByName(pname)) {
-                std::cout << "\n[ERROR] Process '" << pname << "' already exists.\n";
+                std::cout << "\n" << colorizeTag("[ERROR] Process '" + pname + "' already exists.") << "\n";
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 clearScreen();
                 printHeader();
@@ -228,7 +234,7 @@ int main() {
             size_t secondSpace = rest.find(' ', firstSpace + 1);
 
             if (firstSpace == std::string::npos || secondSpace == std::string::npos) {
-                std::cout << "\n[ERROR] Invalid syntax. Usage: screen -c <name> <mem> \"<instructions>\"\n";
+                std::cout << "\n" << colorizeTag("[ERROR] Invalid syntax. Usage: screen -c <name> <mem> \"<instructions>\"") << "\n";
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 clearScreen();
                 printHeader();
@@ -250,7 +256,7 @@ int main() {
             std::cout << "[DEBUG] Parsed instrStr:\n" << debugInstrStr << "\n";
 
             if (mem < 64 || mem > 65536 || (mem & (mem - 1)) != 0) {
-                std::cout << "\n[ERROR] Invalid memory size. Must be power of 2 between 64 and 65536 bytes.\n";
+                std::cout << "\n" << colorizeTag("[ERROR] Invalid memory size. Must be power of 2 between 64 and 65536 bytes.") << "\n";
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 clearScreen();
                 printHeader();
@@ -258,7 +264,7 @@ int main() {
             }
 
             if (coreManager.getProcessByName(pname)) {
-                std::cout << "\n[ERROR] Process '" << pname << "' already exists.\n";
+                std::cout << "\n" << colorizeTag("[ERROR] Process '" + pname + "' already exists.") << "\n";
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 clearScreen();
                 printHeader();
@@ -267,14 +273,14 @@ int main() {
 
             auto parsed = parseInstructions(instrStr);
             if (parsed.empty()) {
-                std::cout << "\n[ERROR] Invalid instruction format.\n";
+                std::cout << "\n" << colorizeTag("[ERROR] Invalid instruction format.") << "\n";
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 clearScreen();
                 printHeader();
                 continue;
             }
             if (parsed.size() > 50) {
-                std::cout << "\n[ERROR] Too many instructions (max 50).\n";
+                std::cout << "\n" << colorizeTag("[ERROR] Too many instructions (max 50).") << "\n";
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 clearScreen();
                 printHeader();
@@ -286,8 +292,18 @@ int main() {
             coreManager.addProcess(proc);
             enterProcessScreen(proc);
         }
+        
+        else if (command == "process-smi" && isInitialized) {
+            coreManager.printProcessSMI(std::cout, true);
+            std::cout << "\nPress ENTER to return to menu...\n";
+            std::string pause;
+            std::getline(std::cin, pause);
+            clearScreen();
+            printHeader();
+        }
+
         else {
-            std::cout << "\nUnrecognized command.\n\n";
+            std::cout << "\n" << colorizeTag("[ERROR] Unrecognized Command.") << "\n\n";
             std::this_thread::sleep_for(std::chrono::seconds(1));
             clearScreen();
             printHeader();

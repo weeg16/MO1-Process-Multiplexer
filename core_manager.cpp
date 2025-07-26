@@ -15,7 +15,11 @@
 #include <fstream>
 
 static const char* ORANGE = "\033[38;5;208m";
-static const char* RESET = "\033[0m";
+static const char* BLUE   = "\033[34m";
+static const char* YELLOW = "\033[33m";
+static const char* GREEN  = "\033[32m"; 
+static const char* RED    = "\033[31m";
+static const char* RESET  = "\033[0m";
 
 CoreManager::CoreManager() {
     stop.store(false);
@@ -252,8 +256,12 @@ void CoreManager::printProcessSummary(std::ostream& out, bool colorize) {
 
     out << "\nCPU utilization: ";
     outc(std::to_string(percent) + "%", ORANGE);
-    out << "\nCores used: " << usedCores << "\nCores available: " << availableCores << "\n";
-    out << "\n----------------------------------------\n";
+    out << "\nCores used: ";
+    outc(std::to_string(usedCores), ORANGE); 
+    out << "\nCores available: "; 
+    outc(std::to_string(availableCores), ORANGE);
+    
+    out << "\n\n----------------------------------------\n";
 
     out << "\nRunning processes:\n\n";
     for (const auto& proc : allProcesses) {
@@ -284,6 +292,64 @@ void CoreManager::printProcessSummary(std::ostream& out, bool colorize) {
     }
 
     out << "\n----------------------------------------\n\n";
+}
+
+void CoreManager::printProcessSMI(std::ostream& out, bool colorize) {
+    const auto& mem = MemoryManager::getInstance();
+    const auto& frames = mem.getFrameTable();
+
+    int totalMem = mem.getTotalMemory();
+    int usedFrames = 0;
+
+    auto outc = [&](const std::string& s, const char* color = "") {
+        if (colorize && color) out << color << s << RESET;
+        else out << s;
+    };
+
+    std::unordered_map<std::string, int> processMemoryBytes;
+
+    for (const auto& frame : frames) {
+        if (frame.occupied) {
+            ++usedFrames;
+            processMemoryBytes[frame.processName] += mem.getMemPerFrame();
+        }
+    }
+
+    int usedMem = usedFrames * mem.getMemPerFrame();
+    int cpuUtilPercent = 0;
+    uint64_t ticks = getCpuTicks();
+    if (ticks > 0) {
+        int active = 0;
+        for (const auto& count : coreInstructions) active += count;
+        cpuUtilPercent = (active * 100) / (ticks * numCores);
+        if (cpuUtilPercent > 100) cpuUtilPercent = 100;
+    }
+
+    auto toMiB = [](int bytes) {
+        return std::max(1, bytes / (1024 * 1024));  // round up to 1MiB minimum if non-zero
+    };
+
+    out << "\n--------------------------------------------\n";
+    out << "| PROCESS-SMI V01.00 Driver Version: 01.00 |\n";
+    out << "--------------------------------------------\n\n";
+
+    out << "CPU-Util:     " << ORANGE << std::to_string(cpuUtilPercent) << "%" << RESET << "\n";
+
+    out << "Memory Usage: " << formatBytes(usedMem)
+        << " / " << formatBytes(totalMem) << "\n";
+
+    out << "Memory Util:  " << ORANGE << (100 * usedMem / totalMem) << "%" << RESET << "\n\n";
+
+    out << "--------------------------------------------\n\n";
+    out << "Running processes and memory usage:\n\n";
+
+    for (const auto& proc : allProcesses) {
+        if (!proc->isFinished() && processMemoryBytes.count(proc->name)) {
+            out << proc->name << "  " << formatBytes(processMemoryBytes[proc->name]) << "\n";
+        }
+    }
+
+    out << "\n--------------------------------------------\n";
 }
 
 int CoreManager::generateRandomInstructionCount() const {
