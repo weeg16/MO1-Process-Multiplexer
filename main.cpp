@@ -65,6 +65,14 @@ int main() {
                     config.frameSize
                 );
 
+                std::ofstream truncateFile(config.diskFile, std::ios::trunc);
+                if (truncateFile.is_open()) {
+                    std::cout << colorizeTag("[INFO] Backing store reset (file truncated).") << "\n";
+                    truncateFile.close();
+                } else {
+                    std::cerr << colorizeTag("[ERROR] Failed to reset backing store.") << "\n";
+                }
+
                 std::ifstream testFile(config.diskFile);
                 if (!testFile.good()) {
                     std::ofstream createFile(config.diskFile);
