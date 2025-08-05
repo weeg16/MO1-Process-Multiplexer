@@ -182,7 +182,6 @@ std::vector<Instruction> parseInstructions(const std::string& input) {
             result.push_back({InstructionType::WRITE, {addr, val}});
         }
         else if (opcode == "PRINT") {
-            // Get everything after PRINT
             std::string rest;
             std::getline(lineStream, rest);
 
@@ -193,26 +192,37 @@ std::vector<Instruction> parseInstructions(const std::string& input) {
 
             std::string content = rest.substr(open + 1, close - open - 1);
             size_t plusPos = content.find('+');
-            if (plusPos == std::string::npos) return {};
 
-            std::string literal = content.substr(0, plusPos);
-            std::string var = content.substr(plusPos + 1);
+            if (plusPos == std::string::npos) {
+                // Only literal string
+                std::string literal = content;
+                literal.erase(std::remove(literal.begin(), literal.end(), '\\'), literal.end());
+                literal.erase(std::remove_if(literal.begin(), literal.end(), ::isspace), literal.end());
 
-            literal.erase(std::remove(literal.begin(), literal.end(), '\\'), literal.end());
-            literal.erase(std::remove_if(literal.begin(), literal.end(), ::isspace), literal.end());
-            var.erase(std::remove_if(var.begin(), var.end(), ::isspace), var.end());
+                if (literal.front() == '"' && literal.back() == '"') {
+                    literal = literal.substr(1, literal.size() - 2);
+                } else {
+                    return {}; // invalid string literal
+                }
 
-            if (literal.front() == '"' && literal.back() == '"') {
-                literal = literal.substr(1, literal.size() - 2);
+                result.push_back({InstructionType::PRINT, {literal}});
             } else {
-                return {}; // invalid string literal
-            }
+                // Literal + variable
+                std::string literal = content.substr(0, plusPos);
+                std::string var = content.substr(plusPos + 1);
 
-            result.push_back({InstructionType::PRINT, {literal, var}});
-        }
-        else {
-            std::cout << "[ERROR] Unknown opcode in line: " << line << "\n";
-            return {};
+                literal.erase(std::remove(literal.begin(), literal.end(), '\\'), literal.end());
+                literal.erase(std::remove_if(literal.begin(), literal.end(), ::isspace), literal.end());
+                var.erase(std::remove_if(var.begin(), var.end(), ::isspace), var.end());
+
+                if (literal.front() == '"' && literal.back() == '"') {
+                    literal = literal.substr(1, literal.size() - 2);
+                } else {
+                    return {}; // invalid string literal
+                }
+
+                result.push_back({InstructionType::PRINT, {literal, var}});
+            }
         }
     }
 
