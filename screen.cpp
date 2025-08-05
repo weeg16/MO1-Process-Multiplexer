@@ -93,6 +93,7 @@ void enterProcessScreen(Process* proc) {
         printHeader();
         std::cout << "Process " << proc->name << " shut down due to memory access violation error that occurred at "
                 << proc->violationTime << ". 0x" << std::hex << std::uppercase << proc->violationAddress << " invalid.\n";
+        std::cout << std::dec; 
         std::cout << "\nPress ENTER to return to menu...\n";
         std::string pause;
         std::getline(std::cin, pause);

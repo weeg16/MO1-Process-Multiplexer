@@ -47,6 +47,8 @@ void CoreManager::configure(uint32_t coresCount, const std::string& schedType, u
     delayPerExec = delay;
     coreBusy.assign(numCores, false);
     coreInstructions.assign(numCores, 0);
+    activeTicksPerCore.assign(numCores, 0);
+    idleTicksPerCore.assign(numCores, 0);
 }
 
 void CoreManager::start() {
@@ -149,12 +151,17 @@ void CoreManager::tickLoop() {
     while (!stop) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         uint64_t tick = cpuTicks.fetch_add(1);
+        for (int i = 0; i < numCores; ++i) {
+            if (coreBusy[i])
+                activeTicksPerCore[i]++;
+            else
+                idleTicksPerCore[i]++;
+        }
 
         if (tick % quantumCycles == 0) {
             MemoryManager::getInstance().dumpSnapshot(tick / quantumCycles);
         }
 
-        // 🔍 Deadlock check every 5 seconds (or adjust if needed)
         if (tick % 5 == 0) {
             if (detectDeadlock()) {
                 std::cout << "[DEADLOCK DETECTED] "
@@ -408,12 +415,13 @@ void CoreManager::printVMStat(std::ostream& out) {
     int usedMem = usedFrames * mem.getMemPerFrame();
     int freeMem = totalMem - usedMem;
 
-    uint64_t totalTicks = getCpuTicks();
-    int totalActive = 0;
-    for (auto count : coreInstructions) totalActive += count;
-    int totalCores = coreInstructions.size();
-    uint64_t totalPossible = totalTicks * totalCores;
-    uint64_t totalIdle = (totalPossible > totalActive) ? totalPossible - totalActive : 0;
+    uint64_t totalActive = 0, totalIdle = 0;
+    for (int i = 0; i < numCores; ++i) {
+        totalActive += activeTicksPerCore[i];
+        totalIdle += idleTicksPerCore[i];
+    }
+
+    uint64_t totalTicks = totalActive + totalIdle;
 
     int active = 0;
     for (auto* proc : allProcesses)
@@ -421,11 +429,7 @@ void CoreManager::printVMStat(std::ostream& out) {
     int finished = allProcesses.size() - active;
 
     // === Output ===
-    out << "\n" << "=== VMSTAT ===\n\n";
-
-    // out << "\n--------------------------------------------\n";
-    // out << "|                  VMSTAT                  |\n";
-    // out << "--------------------------------------------\n\n";
+    out << "\n=== VMSTAT ===\n\n";
 
     out << BLUE << "Memory Summary:\n\n" << RESET;
     out << "Total Memory: " << ORANGE << totalMem << RESET << " bytes\n";
@@ -435,7 +439,7 @@ void CoreManager::printVMStat(std::ostream& out) {
     out << BLUE << "CPU Ticks:\n\n" << RESET;
     out << "- Idle:   " << ORANGE << totalIdle << RESET << "\n";
     out << "- Active: " << ORANGE << totalActive << RESET << "\n";
-    out << "- Total:  " << ORANGE << totalPossible << RESET << "\n\n";
+    out << "- Total:  " << ORANGE << totalTicks << RESET << "\n\n";
 
     out << BLUE << "Page Activity:\n\n" << RESET;
     out << "- Pages Paged In:  " << ORANGE << mem.getPagesIn() << RESET << "\n";
@@ -452,10 +456,9 @@ void CoreManager::printVMStat(std::ostream& out) {
         out << "\n";
     }
 
-    // not sure if we have to display the list of processes.. so this is what i did for now.. specs kinda confusing
     out << "\n" << BLUE << "Processes:\n\n" << RESET;
     out << "- Active:   " << ORANGE << active << RESET << "\n";
-    out << "- Finished: " << ORANGE << finished << RESET << "\n"; 
+    out << "- Finished: " << ORANGE << finished << RESET << "\n";
 }
 
 bool CoreManager::detectDeadlock() {
@@ -479,4 +482,3 @@ bool CoreManager::detectDeadlock() {
 
     return allCoresIdle && allWaiting && memoryFull;
 }
-

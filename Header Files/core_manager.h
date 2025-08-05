@@ -66,6 +66,8 @@ private:
 
     std::vector<bool> coreBusy;
     std::vector<uint32_t> coreInstructions;
+    std::vector<uint64_t> activeTicksPerCore;
+    std::vector<uint64_t> idleTicksPerCore;
 
     std::queue<Process*> readyQueue;
     std::vector<Process*> allProcesses;
