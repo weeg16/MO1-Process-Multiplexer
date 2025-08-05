@@ -209,7 +209,6 @@ const std::vector<MemoryManager::FrameInfo>& MemoryManager::getFrameTable() cons
 bool MemoryManager::loadPage(Process* proc, int pageNumber, uint64_t currentCycle) {
     std::lock_guard<std::mutex> lock(memMutex);
 
-    // Step 1: Try to find a free frame
     int frameIndex = -1;
     for (int i = 0; i < numFrames; ++i) {
         if (!frameTable[i].occupied) {
@@ -218,7 +217,6 @@ bool MemoryManager::loadPage(Process* proc, int pageNumber, uint64_t currentCycl
         }
     }
 
-    // Step 2: If no free frame, use LRU
     if (frameIndex == -1) {
         int oldestCycle = INT32_MAX;
         for (int i = 0; i < numFrames; ++i) {
@@ -230,35 +228,31 @@ bool MemoryManager::loadPage(Process* proc, int pageNumber, uint64_t currentCycl
 
         std::string victimProc = frameTable[frameIndex].processName;
         int victimPage = frameTable[frameIndex].pageNumber;
-
         Process* victim = MemoryManager::getInstance().findProcessByName(victimProc);
-        if (victim) {
-            // if (victim->pageTable[victimPage].dirty) {
-            //     std::cout << "[SWAP-OUT] Writing dirty page " << victimPage << " of process " << victimProc << " to backing store.\n"; // FOR DEBUGGING
-            //     // (Optional: simulate writing to backing store file)
-            // }
 
-            if (victim->pageTable[victimPage].dirty) {
-                std::ofstream backingStore("csopesy-backing-store.txt", std::ios::app);
-                if (backingStore.is_open()) {
-                    // You can replace "dummydata" with your page content if available
-                    backingStore << victimProc << "," << victimPage << "," << "dummydata" << std::endl;
-                    backingStore.close();
+        if (victim && victim->pageTable[victimPage].dirty) {
+            std::ofstream backingStore("csopesy-backing-store.txt", std::ios::app);
+            if (backingStore.is_open()) {
+                int pageStart = victimPage * memPerFrame;
+                int pageEnd = pageStart + memPerFrame;
+                for (int addr = pageStart; addr < pageEnd; ++addr) {
+                    if (victim->memory.count(addr)) {
+                        backingStore << victimProc << "," << victimPage << "," << addr << "," << victim->memory[addr] << "\n";
+                    }
                 }
+                backingStore.close();
             }
+        }
 
+        if (victim) {
             victim->logPrint("Evicted page " + std::to_string(victimPage) + " from frame " + std::to_string(frameIndex));
             victim->pageTable[victimPage].valid = false;
             victim->pageTable[victimPage].frameNumber = -1;
             victim->pageTable[victimPage].dirty = false;
-
             pagesOut++;
         }
-
-        // std::cout << "[EVICT] Replacing page " << victimPage << " from process " << victimProc << " (frame " << frameIndex << ")\n";
     }
 
-    // Step 3: Load new page
     frameTable[frameIndex].occupied = true;
     frameTable[frameIndex].processName = proc->name;
     frameTable[frameIndex].pageNumber = pageNumber;
@@ -268,18 +262,23 @@ bool MemoryManager::loadPage(Process* proc, int pageNumber, uint64_t currentCycl
     pageEntry.frameNumber = frameIndex;
     pageEntry.valid = true;
     pageEntry.lastUsedCycle = currentCycle;
-
     pagesIn++;
 
-    // Simulate swap-in: check if this page is in the backing store file
     std::ifstream backingStore("csopesy-backing-store.txt");
     std::string line;
     while (std::getline(backingStore, line)) {
         std::istringstream iss(line);
-        std::string procName, pageStr, data;
+        std::string procName, pageStr, addrStr, valStr;
         std::getline(iss, procName, ',');
         std::getline(iss, pageStr, ',');
-        std::getline(iss, data); // data can contain commas
+        std::getline(iss, addrStr, ',');
+        std::getline(iss, valStr);
+
+        if (procName == proc->name && std::stoi(pageStr) == pageNumber) {
+            int addr = std::stoi(addrStr);
+            int value = std::stoi(valStr);
+            proc->memory[addr] = static_cast<uint16_t>(value);
+        }
     }
     backingStore.close();
 

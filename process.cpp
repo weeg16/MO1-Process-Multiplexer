@@ -144,11 +144,16 @@ void Process::executeSingleInstruction(const Instruction& ins) {
             }
 
             uint16_t value = memory.count(address) ? memory[address] : 0;
+            if (!ensureSymbolTableMapped(this)) {
+                logPrint("Page fault on READ (symbol table)");
+                return;
+            }
+
             variables[varName] = value;
 
             std::ostringstream oss;
-            oss << "READ " << addrStr << " → " << varName << " = " << value;
-            // logPrint(oss.str());
+            oss << "READ " << addrStr << "  " << varName << " = " << value;
+            logPrint(oss.str());
             break;
         }
 
@@ -177,6 +182,11 @@ void Process::executeSingleInstruction(const Instruction& ins) {
 
             int value = 0;
             try {
+                if (!ensureSymbolTableMapped(this)) {
+                    logPrint("Page fault on WRITE (symbol table)");
+                    return;
+                }
+
                 if (variables.count(valStr)) {
                     value = variables[valStr];
                 } else {
@@ -209,7 +219,7 @@ void Process::executeSingleInstruction(const Instruction& ins) {
 
             std::ostringstream oss;
             oss << "WRITE " << addrStr << " = " << value;
-            // logPrint(oss.str());
+            logPrint(oss.str());
             break;
         }
 
