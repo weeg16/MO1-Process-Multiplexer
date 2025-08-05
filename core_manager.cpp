@@ -149,12 +149,29 @@ void CoreManager::tickLoop() {
     while (!stop) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         uint64_t tick = cpuTicks.fetch_add(1);
+
         if (tick % quantumCycles == 0) {
             MemoryManager::getInstance().dumpSnapshot(tick / quantumCycles);
         }
+
+        // 🔍 Deadlock check every 5 seconds (or adjust if needed)
+        if (tick % 5 == 0) {
+            if (detectDeadlock()) {
+                std::cout << "[DEADLOCK DETECTED] "
+                          << "Tick: " << tick
+                          << " | Memory full, all cores idle, and all processes waiting.\n";
+
+                std::ofstream log("deadlock_log.txt", std::ios::app);
+                log << "[DEADLOCK @ TICK " << tick << "] "
+                    << "Memory full, all cores idle, all processes waiting.\n";
+                log.close();
+            }
+        }
+
         queueCond.notify_all();
     }
 }
+
 
 void CoreManager::busyWait(uint32_t milliseconds) {
     using clock = std::chrono::high_resolution_clock;
@@ -440,3 +457,26 @@ void CoreManager::printVMStat(std::ostream& out) {
     out << "- Active:   " << ORANGE << active << RESET << "\n";
     out << "- Finished: " << ORANGE << finished << RESET << "\n"; 
 }
+
+bool CoreManager::detectDeadlock() {
+    std::lock_guard<std::mutex> lock(queueMutex);  // correct mutex for queue & status
+
+    // 1. Check if all cores are idle
+    bool allCoresIdle = true;
+    for (bool busy : coreBusy) {
+        if (busy) {
+            allCoresIdle = false;
+            break;
+        }
+    }
+
+    // 2. Check if no processes are running or finished
+    bool allWaiting = !readyQueue.empty() && allProcesses.size() > 0;
+
+    // 3. Memory fully used
+    const auto& mem = MemoryManager::getInstance();
+    bool memoryFull = mem.getFreeMemory() == 0;
+
+    return allCoresIdle && allWaiting && memoryFull;
+}
+

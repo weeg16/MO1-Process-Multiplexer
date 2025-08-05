@@ -44,6 +44,7 @@ public:
     void printProcessSMI(std::ostream& out, bool colorize);
     void printVMStat(std::ostream& out);
 
+    bool detectDeadlock();
 
 private:
     void tickLoop();

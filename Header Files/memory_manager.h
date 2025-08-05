@@ -45,6 +45,9 @@ public:
     int getPagesIn() const { return pagesIn; }
     int getPagesOut() const { return pagesOut; }
 
+    int getFreeMemory() const;
+
+
 private:
     MemoryManager();
     MemoryManager(const MemoryManager&) = delete;

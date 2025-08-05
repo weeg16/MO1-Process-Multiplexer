@@ -284,3 +284,11 @@ bool MemoryManager::loadPage(Process* proc, int pageNumber, uint64_t currentCycl
 
     return true;
 }
+
+int MemoryManager::getFreeMemory() const {
+    int used = 0;
+    for (const auto& f : frameTable) {
+        if (f.occupied) used += memPerFrame;
+    }
+    return totalMemory - used;
+}
