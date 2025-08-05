@@ -18,7 +18,7 @@ Process::Process(const std::string& name, int id, int totalIns)
 
 Process::Process(const std::string& name, int id, int totalIns, int requestedMem)
     : name(name), id(id), totalInstructions(totalIns), executedInstructions(0),
-      assignedCore(-1), requestedMemory(requestedMem) {
+    assignedCore(-1), inMemory(false), requestedMemory(requestedMem) {
 
     std::time_t now = std::time(nullptr);
     char buf[100];
