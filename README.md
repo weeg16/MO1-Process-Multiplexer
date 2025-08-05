@@ -18,6 +18,7 @@ This program simulates a basic operating system process scheduler with support f
 2. **Run:**
    ```sh
    emulator
+   .\emulator.exe
 
 3. **Config:**
     - Make sure config.txt is present in the project directory.
