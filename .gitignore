@@ -1,0 +1,19 @@
+# 💾 Ignore backing store file
+csopesy-backing-store.txt
+csopesy-log.txt
+
+# 🧠 Ignore memory snapshots
+memory_snapshots/
+memory_snapshots/*
+
+# 🧩 Ignore build artifacts
+*.dll
+emulator.exe
+
+# 🛠️ Ignore VSCode project settings
+.vscode/
+.vscode/*
+
+# 🗑️ Ignore common OS files
+.DS_Store
+Thumbs.db

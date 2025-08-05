@@ -44,6 +44,13 @@ bool loadConfig(const std::string& filename, Config& config) {
         else if (key == "min-ins") iss >> config.minIns;
         else if (key == "max-ins") iss >> config.maxIns;
         else if (key == "delay-per-exec") iss >> config.delayPerExec;
+
+        else if (key == "max-overall-mem") iss >> config.maxMemory;
+        else if (key == "mem-per-frame") iss >> config.frameSize;
+        else if (key == "min-mem-per-proc") iss >> config.minMemPerProc;
+        else if (key == "max-mem-per-proc") iss >> config.maxMemPerProc;
+        else if (key == "disk-file") iss >> config.diskFile;
+
     }
 
     return true;

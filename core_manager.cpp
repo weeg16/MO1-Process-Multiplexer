@@ -13,9 +13,14 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include <iomanip>
 
 static const char* ORANGE = "\033[38;5;208m";
-static const char* RESET = "\033[0m";
+static const char* BLUE   = "\033[34m";
+static const char* YELLOW = "\033[33m";
+static const char* GREEN  = "\033[32m"; 
+static const char* RED    = "\033[31m";
+static const char* RESET  = "\033[0m";
 
 CoreManager::CoreManager() {
     stop.store(false);
@@ -42,6 +47,8 @@ void CoreManager::configure(uint32_t coresCount, const std::string& schedType, u
     delayPerExec = delay;
     coreBusy.assign(numCores, false);
     coreInstructions.assign(numCores, 0);
+    activeTicksPerCore.assign(numCores, 0);
+    idleTicksPerCore.assign(numCores, 0);
 }
 
 void CoreManager::start() {
@@ -88,18 +95,27 @@ void CoreManager::startSchedulerThread(const Config& config) {
                 int numIns = dist(rng);
                 auto* proc = new Process(pname, processCounter++, numIns);
                 addProcess(proc);
-                std::this_thread::sleep_for(std::chrono::seconds(config.batchProcFreq));
+
+
+                std::unique_lock<std::mutex> lock(generatorMutex);
+                if (generatorCond.wait_for(lock, std::chrono::seconds(config.batchProcFreq),
+                                        [&] { return !generating.load(); })) {
+                    break;  // Exit early if generating turned false
+}
             }
         } catch (const std::exception& e) {
             std::cerr << "[Scheduler Error] " << e.what() << "\n";
         }
     });
-    std::cout << "[INFO] Batch process generation started.\n";
+    std::cout << colorizeTag("[INFO] Batch process generation started.") << "\n\n";
 }
 
 void CoreManager::stopSchedulerThread() {
     if (!generating.load()) return;
     generating = false;
+
+    generatorCond.notify_all();  // Wakes up the wait
+
     if (schedulerThread.joinable()) schedulerThread.join();
     std::cout << "[INFO] Batch process generation stopped.\n";
 }
@@ -135,12 +151,34 @@ void CoreManager::tickLoop() {
     while (!stop) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         uint64_t tick = cpuTicks.fetch_add(1);
+        for (int i = 0; i < numCores; ++i) {
+            if (coreBusy[i])
+                activeTicksPerCore[i]++;
+            else
+                idleTicksPerCore[i]++;
+        }
+
         if (tick % quantumCycles == 0) {
             MemoryManager::getInstance().dumpSnapshot(tick / quantumCycles);
         }
+
+        if (tick % 5 == 0) {
+            if (detectDeadlock()) {
+                std::cout << "[DEADLOCK DETECTED] "
+                          << "Tick: " << tick
+                          << " | Memory full, all cores idle, and all processes waiting.\n";
+
+                std::ofstream log("deadlock_log.txt", std::ios::app);
+                log << "[DEADLOCK @ TICK " << tick << "] "
+                    << "Memory full, all cores idle, all processes waiting.\n";
+                log.close();
+            }
+        }
+
         queueCond.notify_all();
     }
 }
+
 
 void CoreManager::busyWait(uint32_t milliseconds) {
     using clock = std::chrono::high_resolution_clock;
@@ -158,6 +196,9 @@ void CoreManager::coreWorker(int coreId) {
         Process* proc = nullptr;
         {
             std::unique_lock<std::mutex> lock(queueMutex);
+
+            // std::cout << "[CORE " << coreId << "] Waiting for a process..." << std::endl; // FOR DEBUGGING
+
             queueCond.wait(lock, [&] { return stop || !readyQueue.empty(); });
 
             if (stop && readyQueue.empty()) {
@@ -170,8 +211,13 @@ void CoreManager::coreWorker(int coreId) {
             proc->assignedCore = coreId;
             coreBusy[coreId] = true;
 
+            // std::cout << "[CORE " << coreId << "] Picked process " << proc->name << " (inMemory=" << proc->inMemory << ")" << std::endl; // FOR DEBUGGING
+
             if (!proc->inMemory) {
+                // std::cout << "[CORE " << coreId << "] Attempting to allocate memory for " << proc->name << std::endl; // FOR DEBUGGING
+
                 if (!MemoryManager::getInstance().allocate(proc)) {
+                    // std::cout << "[CORE " << coreId << "] Could not allocate memory for " << proc->name << ", requeuing." << std::endl; // FOR DEBUGGING
                     // Cannot allocate memory — requeue and skip this cycle
                     readyQueue.push(proc);
                     queueCond.notify_one();
@@ -214,10 +260,10 @@ Process* CoreManager::getProcessByName(const std::string& name) {
     return nullptr;
 }
 
-Process* CoreManager::spawnNewNamedProcess(const std::string& name) {
+Process* CoreManager::spawnNewNamedProcess(const std::string& name, int memoryBytes) {
     std::uniform_int_distribution<uint32_t> dist(minIns, maxIns);
     int numIns = dist(rng);
-    Process* proc = new Process(name, processCounter++, numIns);
+    Process* proc = new Process(name, processCounter++, numIns, memoryBytes);
     addProcess(proc);
     return proc;
 }
@@ -235,8 +281,12 @@ void CoreManager::printProcessSummary(std::ostream& out, bool colorize) {
 
     out << "\nCPU utilization: ";
     outc(std::to_string(percent) + "%", ORANGE);
-    out << "\nCores used: " << usedCores << "\nCores available: " << availableCores << "\n";
-    out << "\n----------------------------------------\n";
+    out << "\nCores used: ";
+    outc(std::to_string(usedCores), ORANGE); 
+    out << "\nCores available: "; 
+    outc(std::to_string(availableCores), ORANGE);
+    
+    out << "\n\n----------------------------------------\n";
 
     out << "\nRunning processes:\n\n";
     for (const auto& proc : allProcesses) {
@@ -269,7 +319,166 @@ void CoreManager::printProcessSummary(std::ostream& out, bool colorize) {
     out << "\n----------------------------------------\n\n";
 }
 
+void CoreManager::printProcessSMI(std::ostream& out, bool colorize) {
+    const auto& mem = MemoryManager::getInstance();
+    const auto& frames = mem.getFrameTable();
+
+    int totalMem = mem.getTotalMemory();
+    int usedFrames = 0;
+
+    auto outc = [&](const std::string& s, const char* color = "") {
+        if (colorize && color) out << color << s << RESET;
+        else out << s;
+    };
+
+    std::unordered_map<std::string, int> processMemoryBytes;
+
+    for (const auto& frame : frames) {
+        if (frame.occupied) {
+            ++usedFrames;
+            processMemoryBytes[frame.processName] += mem.getMemPerFrame();
+        }
+    }
+
+    int usedMem = usedFrames * mem.getMemPerFrame();
+    int cpuUtilPercent = 0;
+    uint64_t ticks = getCpuTicks();
+    if (ticks > 0) {
+        int active = 0;
+        for (const auto& count : coreInstructions) active += count;
+        cpuUtilPercent = (active * 100) / (ticks * numCores);
+        if (cpuUtilPercent > 100) cpuUtilPercent = 100;
+    }
+
+    auto toMiB = [](int bytes) {
+        return std::max(1, bytes / (1024 * 1024));  // round up to 1MiB minimum if non-zero
+    };
+
+    out << "\n--------------------------------------------\n";
+    out << "| PROCESS-SMI V01.00 Driver Version: 01.00 |\n";
+    out << "--------------------------------------------\n\n";
+
+    out << "CPU-Util:     " << ORANGE << std::to_string(cpuUtilPercent) << "%" << RESET << "\n";
+
+    out << "Memory Usage: " << formatBytes(usedMem)
+        << " / " << formatBytes(totalMem) << "\n";
+
+    out << "Memory Util:  " << ORANGE << (100 * usedMem / totalMem) << "%" << RESET << "\n\n";
+
+    out << "--------------------------------------------\n\n";
+    out << "Running processes and memory usage:\n\n";
+
+    for (const auto& proc : allProcesses) {
+        if (!proc->isFinished() && processMemoryBytes.count(proc->name)) {
+            out << proc->name << "  " << formatBytes(processMemoryBytes[proc->name]) << "\n";
+        }
+    }
+
+    out << "\n--------------------------------------------\n";
+}
+
 int CoreManager::generateRandomInstructionCount() const {
     std::uniform_int_distribution<uint32_t> dist(minIns, maxIns);
     return dist(const_cast<std::default_random_engine&>(rng));
+}
+
+void CoreManager::pauseCores() {
+    stop = true;
+    queueCond.notify_all();  // unblock any waiting threads
+    if (tickThread.joinable()) tickThread.join();
+
+    for (auto& t : cores) {
+        if (t.joinable()) t.join();
+    }
+
+    std::cout << "\n[INFO] Cores paused. No further execution or snapshots.\n\n";
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+    clearScreen();
+    printHeader();
+}
+
+uint64_t CoreManager::getCpuTicks() const {
+    return cpuTicks.load();
+}
+
+void CoreManager::printVMStat(std::ostream& out) {
+    const auto& mem = MemoryManager::getInstance();
+    const auto& frames = mem.getFrameTable();
+
+    int totalMem = mem.getTotalMemory();
+    int usedFrames = 0;
+
+    for (const auto& f : frames) {
+        if (f.occupied) usedFrames++;
+    }
+
+    int usedMem = usedFrames * mem.getMemPerFrame();
+    int freeMem = totalMem - usedMem;
+
+    uint64_t totalActive = 0, totalIdle = 0;
+    for (int i = 0; i < numCores; ++i) {
+        totalActive += activeTicksPerCore[i];
+        totalIdle += idleTicksPerCore[i];
+    }
+
+    uint64_t totalTicks = totalActive + totalIdle;
+
+    int active = 0;
+    for (auto* proc : allProcesses)
+        if (!proc->isFinished()) active++;
+    int finished = allProcesses.size() - active;
+
+    // === Output ===
+    out << "\n=== VMSTAT ===\n\n";
+
+    out << BLUE << "Memory Summary:\n\n" << RESET;
+    out << "Total Memory: " << ORANGE << totalMem << RESET << " bytes\n";
+    out << "Used Memory:  " << ORANGE << usedMem << RESET << " bytes\n";
+    out << "Free Memory:  " << ORANGE << freeMem << RESET << " bytes\n\n";
+
+    out << BLUE << "CPU Ticks:\n\n" << RESET;
+    out << "- Idle:   " << ORANGE << totalIdle << RESET << "\n";
+    out << "- Active: " << ORANGE << totalActive << RESET << "\n";
+    out << "- Total:  " << ORANGE << totalTicks << RESET << "\n\n";
+
+    out << BLUE << "Page Activity:\n\n" << RESET;
+    out << "- Pages Paged In:  " << ORANGE << mem.getPagesIn() << RESET << "\n";
+    out << "- Pages Paged Out: " << ORANGE << mem.getPagesOut() << RESET << "\n\n";
+
+    out << BLUE << "Frame Table Usage:\n\n" << RESET;
+    for (int i = 0; i < frames.size(); ++i) {
+        const auto& f = frames[i];
+        out << "Frame " << std::setw(2) << i << ": ";
+        if (f.occupied)
+            out << f.processName << ", page " << f.pageNumber << " (" << GREEN << "valid" << RESET << ")";
+        else
+            out << RED << "[free]" << RESET;
+        out << "\n";
+    }
+
+    out << "\n" << BLUE << "Processes:\n\n" << RESET;
+    out << "- Active:   " << ORANGE << active << RESET << "\n";
+    out << "- Finished: " << ORANGE << finished << RESET << "\n";
+}
+
+bool CoreManager::detectDeadlock() {
+    std::lock_guard<std::mutex> lock(queueMutex);  // correct mutex for queue & status
+
+    // 1. Check if all cores are idle
+    bool allCoresIdle = true;
+    for (bool busy : coreBusy) {
+        if (busy) {
+            allCoresIdle = false;
+            break;
+        }
+    }
+
+    // 2. Check if no processes are running or finished
+    bool allWaiting = !readyQueue.empty() && allProcesses.size() > 0;
+
+    // 3. Memory fully used
+    const auto& mem = MemoryManager::getInstance();
+    bool memoryFull = mem.getFreeMemory() == 0;
+
+    return allCoresIdle && allWaiting && memoryFull;
 }

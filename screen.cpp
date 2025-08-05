@@ -87,6 +87,21 @@ void enterProcessScreen(Process* proc) {
     // if (screens.count(proc->name) == 0) {
     //     screens[proc->name] = ConsoleScreen{ proc->name, "", getCurrentTimestamp() };
     // }
+
+    if (proc->memoryViolation) {
+        clearScreen();
+        printHeader();
+        std::cout << "Process " << proc->name << " shut down due to memory access violation error that occurred at "
+                << proc->violationTime << ". 0x" << std::hex << std::uppercase << proc->violationAddress << " invalid.\n";
+        std::cout << std::dec; 
+        std::cout << "\nPress ENTER to return to menu...\n";
+        std::string pause;
+        std::getline(std::cin, pause);
+        clearScreen();
+        printHeader();
+        return;
+    }
+
     clearScreen();
     printHeader();
     std::cout << "[Attached to process: " << proc->name << "]\n";
@@ -108,20 +123,21 @@ void enterProcessScreen(Process* proc) {
             printProcessLogsAndDetails(proc);
 
             if (proc->isFinished()) {
-                std::cout << "\nProcess finished. Exiting screen in 2 seconds...\n";
-                std::this_thread::sleep_for(std::chrono::seconds(2));
-                // Remove from map when process finishes
-                // screens.erase(proc->name);
+                clearScreen();
+                printHeader();
+                printProcessInfo(proc);
+                printProcessLogsAndDetails(proc);
+
+                std::cout << "\nProcess finished. Press ENTER to return to menu...\n";
+                std::string pause;
+                std::getline(std::cin, pause);
                 clearScreen();
                 printHeader();
                 break;
             }
+
         } else {
             std::cout << "Unknown command.\n";
         }
     }
 }
-
-// bool screenExists(const std::string& name) {
-//     return screens.count(name) > 0;
-// }

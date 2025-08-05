@@ -35,8 +35,16 @@ public:
     void listProcessStatus();
     void printProcessSummary(std::ostream& out, bool colorize);
     Process* getProcessByName(const std::string& name);
-    Process* spawnNewNamedProcess(const std::string& name);
+    Process* spawnNewNamedProcess(const std::string& name, int memoryBytes);
+
     int generateRandomInstructionCount() const;
+    void pauseCores();
+
+    uint64_t getCpuTicks() const;
+    void printProcessSMI(std::ostream& out, bool colorize);
+    void printVMStat(std::ostream& out);
+
+    bool detectDeadlock();
 
 private:
     void tickLoop();
@@ -58,6 +66,8 @@ private:
 
     std::vector<bool> coreBusy;
     std::vector<uint32_t> coreInstructions;
+    std::vector<uint64_t> activeTicksPerCore;
+    std::vector<uint64_t> idleTicksPerCore;
 
     std::queue<Process*> readyQueue;
     std::vector<Process*> allProcesses;
@@ -69,4 +79,7 @@ private:
     std::atomic<uint64_t> cpuTicks{0};
 
     std::default_random_engine rng{std::random_device{}()};
+
+    std::condition_variable generatorCond;
+    std::mutex generatorMutex;
 };

@@ -1,4 +1,5 @@
 #include "memory_manager.h"
+#include "core_manager.h"
 #include "util.h"
 
 #include <fstream>
@@ -10,6 +11,16 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <direct.h> // For Windows
+
+extern CoreManager coreManager;  // Access global coreManager
+
+Process* MemoryManager::findProcessByName(const std::string& name) {
+    return coreManager.getProcessByName(name);
+}
+
+uint64_t MemoryManager::getCurrentCycle() const {
+    return coreManager.getCpuTicks();  // assuming getCpuTicks() exists
+}
 
 inline void createFolderIfMissing(const std::string& folderName) {
 #ifdef _WIN32
@@ -29,16 +40,44 @@ MemoryManager::MemoryManager() {
     memoryBlocks.push_back({0, totalMemory - 1, false, ""});
 }
 
+void MemoryManager::init(uint32_t totalMem, uint32_t perProcMem, uint32_t memPerFrame) {
+    totalMemory = totalMem;
+    processMemory = perProcMem;
+    this->memPerFrame = memPerFrame;
+
+    numFrames = totalMemory / memPerFrame;
+
+    frameTable.clear();
+    frameTable.resize(numFrames);  // All entries default to unoccupied
+
+    memoryBlocks.clear();
+    memoryBlocks.push_back({0, totalMemory - 1, false, ""});
+
+    // std::cout << "[INIT] totalMemory = " << totalMemory << ", processMemory = " << processMemory << std::endl; // FOR DEBUGGING
+
+    // std::cout << "[DEBUG] Initialized " << numFrames << " physical frames (mem-per-frame = " 
+    //         << memPerFrame << ")\n";
+
+    // for (int i = 0; i < numFrames; ++i) {
+    //     std::cout << "  Frame " << i 
+    //             << " | Occupied: " << (frameTable[i].occupied ? "true" : "false")
+    //             << " | Owner: " << frameTable[i].processName 
+    //             << " | Page: " << frameTable[i].pageNumber << "\n";
+    // }
+}
+
 bool MemoryManager::allocate(Process* proc) {
     std::lock_guard<std::mutex> lock(memMutex);
+
+    // std::cout << "[ALLOCATE] Trying to allocate memory for process " << proc->name << std::endl; // FOR DEBUGGING
 
     for (auto& block : memoryBlocks) {
         int blockSize = block.end - block.start + 1;
 
-        if (!block.occupied && blockSize >= processMemory) {
+        if (!block.occupied && blockSize >= proc->requestedMemory) {
             // Allocate from this block
             int allocStart = block.start;
-            int allocEnd = allocStart + processMemory - 1;
+            int allocEnd = allocStart + proc->requestedMemory - 1;
 
             // Update current block
             block.start = allocEnd + 1;
@@ -59,10 +98,13 @@ bool MemoryManager::allocate(Process* proc) {
             proc->memEnd = allocEnd;
             proc->inMemory = true;
 
+            // std::cout << "[ALLOCATE] Successfully allocated memory for process " << proc->name << std::endl; // FOR DEBUGGING
+
             return true;
         }
     }
 
+    // std::cout << "[ALLOCATE] Failed to allocate memory for process " << proc->name << std::endl; // FOR DEBUGGING
     return false; // no space
 }
 
@@ -146,5 +188,107 @@ void MemoryManager::dumpSnapshot(uint64_t quantum) {
     }
 
     out << "----start---- = 0\n";
+
+    out << "\n--- Frame Table ---\n";
+    for (int i = 0; i < frameTable.size(); ++i) {
+        const auto& frame = frameTable[i];
+        if (frame.occupied)
+            out << "Frame " << i << ": " << frame.processName << ", page " << frame.pageNumber << " (valid)\n";
+        else
+            out << "Frame " << i << ": [free]\n";
+    }
+    out << "\n";
+
     out.close();
+}
+
+const std::vector<MemoryManager::FrameInfo>& MemoryManager::getFrameTable() const {
+    return frameTable;
+}
+
+bool MemoryManager::loadPage(Process* proc, int pageNumber, uint64_t currentCycle) {
+    std::lock_guard<std::mutex> lock(memMutex);
+
+    int frameIndex = -1;
+    for (int i = 0; i < numFrames; ++i) {
+        if (!frameTable[i].occupied) {
+            frameIndex = i;
+            break;
+        }
+    }
+
+    if (frameIndex == -1) {
+        int oldestCycle = INT32_MAX;
+        for (int i = 0; i < numFrames; ++i) {
+            if (frameTable[i].lastUsedCycle < oldestCycle) {
+                oldestCycle = frameTable[i].lastUsedCycle;
+                frameIndex = i;
+            }
+        }
+
+        std::string victimProc = frameTable[frameIndex].processName;
+        int victimPage = frameTable[frameIndex].pageNumber;
+        Process* victim = MemoryManager::getInstance().findProcessByName(victimProc);
+
+        if (victim && victim->pageTable[victimPage].dirty) {
+            std::ofstream backingStore("csopesy-backing-store.txt", std::ios::app);
+            if (backingStore.is_open()) {
+                int pageStart = victimPage * memPerFrame;
+                int pageEnd = pageStart + memPerFrame;
+                for (int addr = pageStart; addr < pageEnd; ++addr) {
+                    if (victim->memory.count(addr)) {
+                        backingStore << victimProc << "," << victimPage << "," << addr << "," << victim->memory[addr] << "\n";
+                    }
+                }
+                backingStore.close();
+            }
+        }
+
+        if (victim) {
+            victim->logPrint("Evicted page " + std::to_string(victimPage) + " from frame " + std::to_string(frameIndex));
+            victim->pageTable[victimPage].valid = false;
+            victim->pageTable[victimPage].frameNumber = -1;
+            victim->pageTable[victimPage].dirty = false;
+            pagesOut++;
+        }
+    }
+
+    frameTable[frameIndex].occupied = true;
+    frameTable[frameIndex].processName = proc->name;
+    frameTable[frameIndex].pageNumber = pageNumber;
+    frameTable[frameIndex].lastUsedCycle = currentCycle;
+
+    auto& pageEntry = proc->pageTable[pageNumber];
+    pageEntry.frameNumber = frameIndex;
+    pageEntry.valid = true;
+    pageEntry.lastUsedCycle = currentCycle;
+    pagesIn++;
+
+    std::ifstream backingStore("csopesy-backing-store.txt");
+    std::string line;
+    while (std::getline(backingStore, line)) {
+        std::istringstream iss(line);
+        std::string procName, pageStr, addrStr, valStr;
+        std::getline(iss, procName, ',');
+        std::getline(iss, pageStr, ',');
+        std::getline(iss, addrStr, ',');
+        std::getline(iss, valStr);
+
+        if (procName == proc->name && std::stoi(pageStr) == pageNumber) {
+            int addr = std::stoi(addrStr);
+            int value = std::stoi(valStr);
+            proc->memory[addr] = static_cast<uint16_t>(value);
+        }
+    }
+    backingStore.close();
+
+    return true;
+}
+
+int MemoryManager::getFreeMemory() const {
+    int used = 0;
+    for (const auto& f : frameTable) {
+        if (f.occupied) used += memPerFrame;
+    }
+    return totalMemory - used;
 }

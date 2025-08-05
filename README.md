@@ -13,11 +13,12 @@ This program simulates a basic operating system process scheduler with support f
 
 1. **Compile:**
    ```sh
-   g++ -std=c++11 -I"Header Files" main.cpp config.cpp core_manager.cpp process.cpp screen.cpp util.cpp instruction_print.cpp instruction_add.cpp instruction_declare.cpp instruction_for.cpp instruction_random.cpp instruction_sleep.cpp instruction_subtract.cpp memory_manager.cpp -o emulator.exe 
+   g++ -std=c++11 -I"Header Files" main.cpp config.cpp core_manager.cpp process.cpp screen.cpp util.cpp instruction_print.cpp instruction_add.cpp instruction_declare.cpp instruction_for.cpp instruction_random.cpp instruction_sleep.cpp instruction_subtract.cpp instruction_read.cpp instruction_write.cpp memory_manager.cpp paging.cpp -o emulator.exe 
 
 2. **Run:**
    ```sh
    emulator
+   .\emulator.exe
 
 3. **Config:**
     - Make sure config.txt is present in the project directory.
